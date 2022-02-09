@@ -309,3 +309,5 @@ discord-rpc
 
 # CMake
 cmake-build-*/
+build-arm64
+build-x86_64
