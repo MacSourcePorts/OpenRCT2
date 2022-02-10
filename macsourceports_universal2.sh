@@ -10,23 +10,23 @@ export COPYRIGHT_TEXT="RollerCoaster Tycoon Copyright © 2002 Chris Sawyer. All 
 #constants
 source ../MSPScripts/constants.sh
 
-# rm -rf ${BUILT_PRODUCTS_DIR}
+rm -rf ${BUILT_PRODUCTS_DIR}
 
-# # create makefiles with cmake, perform builds with make
-# rm -rf ${X86_64_BUILD_FOLDER}
-# mkdir ${X86_64_BUILD_FOLDER}
-# cd ${X86_64_BUILD_FOLDER}
-# /usr/local/bin/cmake -DCMAKE_INSTALL_PREFIX=./install -DARCH=x86_64 ..
-# make -j$NCPU install
+# create makefiles with cmake, perform builds with make
+rm -rf ${X86_64_BUILD_FOLDER}
+mkdir ${X86_64_BUILD_FOLDER}
+cd ${X86_64_BUILD_FOLDER}
+/usr/local/bin/cmake -DCMAKE_INSTALL_PREFIX=./install -DARCH=x86_64 ..
+make -j$NCPU install
 
-# cd ..
-# rm -rf ${ARM64_BUILD_FOLDER}
-# mkdir ${ARM64_BUILD_FOLDER}
-# cd ${ARM64_BUILD_FOLDER}
-# cmake -DCMAKE_INSTALL_PREFIX=./install ..
-# make -j$NCPU install
+cd ..
+rm -rf ${ARM64_BUILD_FOLDER}
+mkdir ${ARM64_BUILD_FOLDER}
+cd ${ARM64_BUILD_FOLDER}
+cmake -DCMAKE_INSTALL_PREFIX=./install ..
+make -j$NCPU install
 
-# cd ..
+cd ..
 
 # create the app bundle
 "../MSPScripts/build_app_bundle.sh" "skiplipo"
@@ -44,22 +44,5 @@ mkdir -p "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}" || exit 1;
 rsync -ah --exclude 'libopenrct2.dylib' ${X86_64_BUILD_FOLDER}/${FRAMEWORKS_FOLDER_PATH}/* ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}
 
 #sign and notarize
-"../MSPScripts/sign_and_notarize.sh" "$1"
-
-#individually sign things in Frameworks folder
-
-source ../MSPScripts/signing_values.local
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libbrotlicommon.1.0.9.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libbrotlidec.1.0.9.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libbz2.1.0.6.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libcrypto.1.1.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libdiscord-rpc.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libfreetype.6.18.0.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libicudata.69.1.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libicuuc.69.1.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libpng16.16.37.0.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libSDL2-2.0.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libspeexdsp.1.2.0.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libssl.1.1.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libz.1.2.11.dylib
-codesign --force --options runtime --deep --sign "${SIGNING_IDENTITY}" ${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libzip.5.3.dylib
+export ENTITLEMENTS_FILE="OpenRCT2.entitlements"
+"../MSPScripts/sign_and_notarize.sh" "$1" entitlements
