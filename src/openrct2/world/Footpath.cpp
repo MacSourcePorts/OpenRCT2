@@ -10,6 +10,7 @@
 #include "../Cheats.h"
 #include "../Context.h"
 #include "../Game.h"
+#include "../Identifiers.h"
 #include "../OpenRCT2.h"
 #include "../actions/FootpathPlaceAction.h"
 #include "../actions/FootpathRemoveAction.h"
@@ -37,6 +38,7 @@
 #include "Park.h"
 #include "Scenery.h"
 #include "Surface.h"
+#include "TileElement.h"
 
 #include <algorithm>
 #include <iterator>
@@ -51,8 +53,8 @@ CoordsXYZ gFootpathConstructFromPosition;
 uint8_t gFootpathConstructSlope;
 uint8_t gFootpathGroundFlags;
 
-static ride_id_t* _footpathQueueChainNext;
-static ride_id_t _footpathQueueChain[64];
+static RideId* _footpathQueueChainNext;
+static RideId _footpathQueueChain[64];
 
 // This is the coordinates that a user of the bin should move to
 // rct2: 0x00992A4C
@@ -128,20 +130,6 @@ TileElement* map_get_footpath_element(const CoordsXYZ& coords)
     return nullptr;
 }
 
-money32 footpath_remove(const CoordsXYZ& footpathLoc, int32_t flags)
-{
-    auto action = FootpathRemoveAction(footpathLoc);
-    action.SetFlags(flags);
-
-    if (flags & GAME_COMMAND_FLAG_APPLY)
-    {
-        auto res = GameActions::Execute(&action);
-        return res.Cost;
-    }
-    auto res = GameActions::Query(&action);
-    return res.Cost;
-}
-
 /**
  *
  *  rct2: 0x006A76FF
@@ -214,10 +202,9 @@ void footpath_provisional_remove()
     {
         gProvisionalFootpath.Flags &= ~PROVISIONAL_PATH_FLAG_1;
 
-        footpath_remove(
-            gProvisionalFootpath.Position,
-            GAME_COMMAND_FLAG_APPLY | GAME_COMMAND_FLAG_ALLOW_DURING_PAUSED | GAME_COMMAND_FLAG_NO_SPEND
-                | GAME_COMMAND_FLAG_GHOST);
+        auto action = FootpathRemoveAction(gProvisionalFootpath.Position);
+        action.SetFlags(GAME_COMMAND_FLAG_ALLOW_DURING_PAUSED | GAME_COMMAND_FLAG_NO_SPEND | GAME_COMMAND_FLAG_GHOST);
+        GameActions::Execute(&action);
     }
 }
 
@@ -583,8 +570,8 @@ struct rct_neighbour
 {
     uint8_t order;
     uint8_t direction;
-    ride_id_t ride_index;
-    uint8_t entrance_index;
+    RideId ride_index;
+    StationIndex entrance_index;
 };
 
 struct rct_neighbour_list
@@ -617,7 +604,7 @@ static void neighbour_list_init(rct_neighbour_list* neighbourList)
 }
 
 static void neighbour_list_push(
-    rct_neighbour_list* neighbourList, int32_t order, int32_t direction, ride_id_t rideIndex, uint8_t entrance_index)
+    rct_neighbour_list* neighbourList, int32_t order, int32_t direction, RideId rideIndex, ::StationIndex entrance_index)
 {
     Guard::Assert(neighbourList->count < std::size(neighbourList->items));
     neighbourList->items[neighbourList->count].order = order;
@@ -817,7 +804,7 @@ static void loc_6A6F1F(
         }
         else
         {
-            neighbour_list_push(neighbourList, 2, direction, RIDE_ID_NULL, 255);
+            neighbour_list_push(neighbourList, 2, direction, RideId::GetNull(), StationIndex::GetNull());
         }
     }
     else
@@ -846,7 +833,7 @@ static void loc_6A6D7E(
     {
         if (query)
         {
-            neighbour_list_push(neighbourList, 7, direction, RIDE_ID_NULL, 255);
+            neighbour_list_push(neighbourList, 7, direction, RideId::GetNull(), StationIndex::GetNull());
         }
         loc_6A6FD2(initialTileElementPos, direction, initialTileElement, query);
     }
@@ -912,7 +899,8 @@ static void loc_6A6D7E(
                         }
                         if (query)
                         {
-                            neighbour_list_push(neighbourList, 1, direction, tileElement->AsTrack()->GetRideIndex(), 255);
+                            neighbour_list_push(
+                                neighbourList, 1, direction, tileElement->AsTrack()->GetRideIndex(), StationIndex::GetNull());
                         }
                         loc_6A6FD2(initialTileElementPos, direction, initialTileElement, query);
                         return;
@@ -1038,13 +1026,13 @@ void footpath_connect_edges(const CoordsXY& footpathPos, TileElement* tileElemen
 
     if (tileElement->GetType() == TileElementType::Path && tileElement->AsPath()->IsQueue())
     {
-        ride_id_t rideIndex = RIDE_ID_NULL;
-        uint8_t entranceIndex = 255;
+        RideId rideIndex = RideId::GetNull();
+        StationIndex entranceIndex = StationIndex::GetNull();
         for (size_t i = 0; i < neighbourList.count; i++)
         {
-            if (neighbourList.items[i].ride_index != RIDE_ID_NULL)
+            if (!neighbourList.items[i].ride_index.IsNull())
             {
-                if (rideIndex == RIDE_ID_NULL)
+                if (rideIndex.IsNull())
                 {
                     rideIndex = neighbourList.items[i].ride_index;
                     entranceIndex = neighbourList.items[i].entrance_index;
@@ -1055,7 +1043,7 @@ void footpath_connect_edges(const CoordsXY& footpathPos, TileElement* tileElemen
                 }
                 else if (
                     rideIndex == neighbourList.items[i].ride_index && entranceIndex != neighbourList.items[i].entrance_index
-                    && neighbourList.items[i].entrance_index != 255)
+                    && !neighbourList.items[i].entrance_index.IsNull())
                 {
                     neighbour_list_remove(&neighbourList, i);
                 }
@@ -1081,7 +1069,7 @@ void footpath_connect_edges(const CoordsXY& footpathPos, TileElement* tileElemen
  *  rct2: 0x006A742F
  */
 void footpath_chain_ride_queue(
-    ride_id_t rideIndex, int32_t entranceIndex, const CoordsXY& initialFootpathPos, TileElement* const initialTileElement,
+    RideId rideIndex, StationIndex entranceIndex, const CoordsXY& initialFootpathPos, TileElement* const initialTileElement,
     int32_t direction)
 {
     TileElement *lastPathElement, *lastQueuePathElement;
@@ -1189,7 +1177,7 @@ void footpath_chain_ride_queue(
         break;
     }
 
-    if (rideIndex != RIDE_ID_NULL && lastPathElement != nullptr)
+    if (!rideIndex.IsNull() && lastPathElement != nullptr)
     {
         if (lastPathElement->AsPath()->IsQueue())
         {
@@ -1210,9 +1198,9 @@ void footpath_queue_chain_reset()
  *
  *  rct2: 0x006A76E9
  */
-void footpath_queue_chain_push(ride_id_t rideIndex)
+void footpath_queue_chain_push(RideId rideIndex)
 {
-    if (rideIndex != RIDE_ID_NULL)
+    if (!rideIndex.IsNull())
     {
         auto* lastSlot = _footpathQueueChain + std::size(_footpathQueueChain) - 1;
         if (_footpathQueueChainNext <= lastSlot)
@@ -1230,18 +1218,17 @@ void footpath_update_queue_chains()
 {
     for (auto* queueChainPtr = _footpathQueueChain; queueChainPtr < _footpathQueueChainNext; queueChainPtr++)
     {
-        ride_id_t rideIndex = *queueChainPtr;
+        RideId rideIndex = *queueChainPtr;
         auto ride = get_ride(rideIndex);
         if (ride == nullptr)
             continue;
 
-        for (int32_t i = 0; i < OpenRCT2::Limits::MaxStationsPerRide; i++)
+        for (const auto& station : ride->GetStations())
         {
-            TileCoordsXYZD location = ride_get_entrance_location(ride, i);
-            if (location.IsNull())
+            if (station.Entrance.IsNull())
                 continue;
 
-            TileElement* tileElement = map_get_first_element_at(location);
+            TileElement* tileElement = map_get_first_element_at(station.Entrance);
             if (tileElement != nullptr)
             {
                 do
@@ -1254,7 +1241,8 @@ void footpath_update_queue_chains()
                         continue;
 
                     Direction direction = direction_reverse(tileElement->GetDirection());
-                    footpath_chain_ride_queue(rideIndex, i, location.ToCoordsXY(), tileElement, direction);
+                    footpath_chain_ride_queue(
+                        rideIndex, ride->GetStationIndex(&station), station.Entrance.ToCoordsXY(), tileElement, direction);
                 } while (!(tileElement++)->IsLastForTile());
             }
         }
@@ -2055,10 +2043,11 @@ void footpath_update_queue_entrance_banner(const CoordsXY& footpathPos, TileElem
             {
                 if (tileElement->AsPath()->GetEdges() & (1 << direction))
                 {
-                    footpath_chain_ride_queue(RIDE_ID_NULL, 0, footpathPos, tileElement, direction);
+                    footpath_chain_ride_queue(
+                        RideId::GetNull(), StationIndex::FromUnderlying(0), footpathPos, tileElement, direction);
                 }
             }
-            tileElement->AsPath()->SetRideIndex(RIDE_ID_NULL);
+            tileElement->AsPath()->SetRideIndex(RideId::GetNull());
         }
     }
     else if (elementType == TileElementType::Entrance)
@@ -2067,7 +2056,8 @@ void footpath_update_queue_entrance_banner(const CoordsXY& footpathPos, TileElem
         {
             footpath_queue_chain_push(tileElement->AsEntrance()->GetRideIndex());
             footpath_chain_ride_queue(
-                RIDE_ID_NULL, 0, footpathPos, tileElement, direction_reverse(tileElement->GetDirection()));
+                RideId::GetNull(), StationIndex::FromUnderlying(0), footpathPos, tileElement,
+                direction_reverse(tileElement->GetDirection()));
         }
     }
 }
@@ -2348,6 +2338,141 @@ void footpath_remove_edges_at(const CoordsXY& footpathPos, TileElement* tileElem
         tileElement->AsPath()->SetEdgesAndCorners(0);
 }
 
+static ObjectEntryIndex FootpathGetDefaultSurface(bool queue)
+{
+    bool showEditorPaths = ((gScreenFlags & SCREEN_FLAGS_SCENARIO_EDITOR) || gCheatsSandboxMode);
+    for (ObjectEntryIndex i = 0; i < MAX_FOOTPATH_SURFACE_OBJECTS; i++)
+    {
+        auto pathEntry = GetPathSurfaceEntry(i);
+        if (pathEntry != nullptr)
+        {
+            if (!showEditorPaths && (pathEntry->Flags & FOOTPATH_ENTRY_FLAG_SHOW_ONLY_IN_SCENARIO_EDITOR))
+            {
+                continue;
+            }
+            if (queue == ((pathEntry->Flags & FOOTPATH_ENTRY_FLAG_IS_QUEUE) != 0))
+            {
+                return i;
+            }
+        }
+    }
+    return OBJECT_ENTRY_INDEX_NULL;
+}
+
+static bool FootpathIsSurfaceEntryOkay(ObjectEntryIndex index, bool queue)
+{
+    auto pathEntry = GetPathSurfaceEntry(index);
+    if (pathEntry != nullptr)
+    {
+        bool showEditorPaths = ((gScreenFlags & SCREEN_FLAGS_SCENARIO_EDITOR) || gCheatsSandboxMode);
+        if (!showEditorPaths && (pathEntry->Flags & FOOTPATH_ENTRY_FLAG_SHOW_ONLY_IN_SCENARIO_EDITOR))
+        {
+            return false;
+        }
+        if (queue == ((pathEntry->Flags & FOOTPATH_ENTRY_FLAG_IS_QUEUE) != 0))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static ObjectEntryIndex FootpathGetDefaultRailings()
+{
+    for (ObjectEntryIndex i = 0; i < MAX_FOOTPATH_RAILINGS_OBJECTS; i++)
+    {
+        const auto* railingEntry = GetPathRailingsEntry(i);
+        if (railingEntry != nullptr)
+        {
+            return i;
+        }
+    }
+    return OBJECT_ENTRY_INDEX_NULL;
+}
+
+static bool FootpathIsLegacyPathEntryOkay(ObjectEntryIndex index)
+{
+    bool showEditorPaths = ((gScreenFlags & SCREEN_FLAGS_SCENARIO_EDITOR) || gCheatsSandboxMode);
+    auto& objManager = OpenRCT2::GetContext()->GetObjectManager();
+    auto footpathObj = static_cast<FootpathObject*>(objManager.GetLoadedObject(ObjectType::Paths, index));
+    if (footpathObj != nullptr)
+    {
+        auto pathEntry = reinterpret_cast<rct_footpath_entry*>(footpathObj->GetLegacyData());
+        return showEditorPaths || !(pathEntry->flags & FOOTPATH_ENTRY_FLAG_SHOW_ONLY_IN_SCENARIO_EDITOR);
+    }
+    return false;
+}
+
+static ObjectEntryIndex FootpathGetDefaultLegacyPath()
+{
+    for (ObjectEntryIndex i = 0; i < MAX_PATH_OBJECTS; i++)
+    {
+        if (FootpathIsLegacyPathEntryOkay(i))
+        {
+            return i;
+        }
+    }
+    return OBJECT_ENTRY_INDEX_NULL;
+}
+
+bool FootpathSelectDefault()
+{
+    // Select default footpath
+    auto surfaceIndex = FootpathGetDefaultSurface(false);
+    if (FootpathIsSurfaceEntryOkay(gFootpathSelection.NormalSurface, false))
+    {
+        surfaceIndex = gFootpathSelection.NormalSurface;
+    }
+
+    // Select default queue
+    auto queueIndex = FootpathGetDefaultSurface(true);
+    if (FootpathIsSurfaceEntryOkay(gFootpathSelection.QueueSurface, true))
+    {
+        queueIndex = gFootpathSelection.QueueSurface;
+    }
+
+    // Select default railing
+    auto railingIndex = FootpathGetDefaultRailings();
+    const auto* railingEntry = GetPathRailingsEntry(gFootpathSelection.Railings);
+    if (railingEntry != nullptr)
+    {
+        railingIndex = gFootpathSelection.Railings;
+    }
+
+    // Select default legacy path
+    auto legacyPathIndex = FootpathGetDefaultLegacyPath();
+    if (gFootpathSelection.LegacyPath != OBJECT_ENTRY_INDEX_NULL)
+    {
+        if (FootpathIsLegacyPathEntryOkay(gFootpathSelection.LegacyPath))
+        {
+            // Keep legacy path selected
+            legacyPathIndex = gFootpathSelection.LegacyPath;
+        }
+        else
+        {
+            // Reset legacy path, we default to a surface (if there are any)
+            gFootpathSelection.LegacyPath = OBJECT_ENTRY_INDEX_NULL;
+        }
+    }
+
+    if (surfaceIndex == OBJECT_ENTRY_INDEX_NULL)
+    {
+        if (legacyPathIndex == OBJECT_ENTRY_INDEX_NULL)
+        {
+            // No surfaces or legacy paths available
+            return false;
+        }
+
+        // No surfaces available, so default to legacy path
+        gFootpathSelection.LegacyPath = legacyPathIndex;
+    }
+
+    gFootpathSelection.NormalSurface = surfaceIndex;
+    gFootpathSelection.QueueSurface = queueIndex;
+    gFootpathSelection.Railings = railingIndex;
+    return true;
+}
+
 const FootpathObject* GetLegacyFootpathEntry(ObjectEntryIndex entryIndex)
 {
     auto& objMgr = OpenRCT2::GetContext()->GetObjectManager();
@@ -2379,12 +2504,12 @@ const FootpathRailingsObject* GetPathRailingsEntry(ObjectEntryIndex entryIndex)
     return static_cast<FootpathRailingsObject*>(obj);
 }
 
-ride_id_t PathElement::GetRideIndex() const
+RideId PathElement::GetRideIndex() const
 {
     return rideIndex;
 }
 
-void PathElement::SetRideIndex(ride_id_t newRideIndex)
+void PathElement::SetRideIndex(RideId newRideIndex)
 {
     rideIndex = newRideIndex;
 }

@@ -18,14 +18,14 @@
 #include "../ride/RideData.h"
 #include "../ride/Track.h"
 #include "../ride/TrackData.h"
+#include "../ride/gentle/Maze.h"
 #include "../world/ConstructionClearance.h"
 #include "../world/Footpath.h"
 #include "../world/Park.h"
 
 using namespace OpenRCT2::TrackMetaData;
 
-MazeSetTrackAction::MazeSetTrackAction(
-    const CoordsXYZD& location, bool initialPlacement, NetworkRideId_t rideIndex, uint8_t mode)
+MazeSetTrackAction::MazeSetTrackAction(const CoordsXYZD& location, bool initialPlacement, RideId rideIndex, uint8_t mode)
     : _loc(location)
     , _initialPlacement(initialPlacement)
     , _rideIndex(rideIndex)
@@ -57,7 +57,7 @@ GameActions::Result MazeSetTrackAction::Query() const
     if ((_loc.z & 0xF) != 0 && _mode == GC_SET_MAZE_TRACK_BUILD)
     {
         res.Error = GameActions::Status::Unknown;
-        res.ErrorMessage = STR_CONSTRUCTION_ERR_UNKNOWN;
+        res.ErrorMessage = STR_INVALID_HEIGHT;
         return res;
     }
 
@@ -90,7 +90,9 @@ GameActions::Result MazeSetTrackAction::Query() const
     {
         heightDifference /= COORDS_Z_PER_TINY_Z;
 
-        if (heightDifference > GetRideTypeDescriptor(RIDE_TYPE_MAZE).Heights.MaxHeight)
+        auto* ride = get_ride(_rideIndex);
+        const auto& rtd = ride->GetRideTypeDescriptor();
+        if (heightDifference > rtd.Heights.MaxHeight)
         {
             res.Error = GameActions::Status::TooHigh;
             res.ErrorMessage = STR_TOO_HIGH_FOR_SUPPORTS;
@@ -137,9 +139,7 @@ GameActions::Result MazeSetTrackAction::Query() const
             return res;
         }
 
-        const auto& ted = GetTrackElementDescriptor(TrackElemType::Maze);
-        money32 price = (((ride->GetRideTypeDescriptor().BuildCosts.TrackPrice * ted.Price) >> 16));
-        res.Cost = price / 2 * 10;
+        res.Cost = MazeCalculateCost(constructResult.Cost, *ride, _loc);
 
         return res;
     }
@@ -173,9 +173,7 @@ GameActions::Result MazeSetTrackAction::Execute() const
     auto tileElement = map_get_track_element_at_of_type_from_ride(_loc, TrackElemType::Maze, _rideIndex);
     if (tileElement == nullptr)
     {
-        const auto& ted = GetTrackElementDescriptor(TrackElemType::Maze);
-        money32 price = (((ride->GetRideTypeDescriptor().BuildCosts.TrackPrice * ted.Price) >> 16));
-        res.Cost = price / 2 * 10;
+        res.Cost = MazeCalculateCost(0, *ride, _loc);
 
         auto startLoc = _loc.ToTileStart();
 
@@ -194,8 +192,8 @@ GameActions::Result MazeSetTrackAction::Execute() const
         map_invalidate_tile_full(startLoc);
 
         ride->maze_tiles++;
-        ride->stations[0].SetBaseZ(tileElement->GetBaseZ());
-        ride->stations[0].Start = { 0, 0 };
+        ride->GetStation().SetBaseZ(tileElement->GetBaseZ());
+        ride->GetStation().Start = { 0, 0 };
 
         if (_initialPlacement && !(flags & GAME_COMMAND_FLAG_GHOST))
         {

@@ -44,7 +44,7 @@ constexpr const RideTypeDescriptor RiverRapidsRTD =
     SET_FIELD(RatingsCalculationFunction, ride_ratings_calculate_river_rapids),
     SET_FIELD(RatingsMultipliers, { 72, 26, 6 }),
     SET_FIELD(UpkeepCosts, { 82, 20, 0, 10, 0, 10 }),
-    SET_FIELD(BuildCosts, { 62, 6, 40, }),
+    SET_FIELD(BuildCosts, { 31.00_GBP, 3.00_GBP, 40, }),
     SET_FIELD(DefaultPrices, { 20, 20 }),
     SET_FIELD(DefaultMusic, MUSIC_OBJECT_WATER),
     SET_FIELD(PhotoItem, ShopItem::Photo4),
@@ -54,5 +54,12 @@ constexpr const RideTypeDescriptor RiverRapidsRTD =
     )),
     SET_FIELD(ColourPreview, { SPR_RIDE_DESIGN_PREVIEW_RIVER_RAPIDS_TRACK, SPR_RIDE_DESIGN_PREVIEW_RIVER_RAPIDS_SUPPORTS }),
     SET_FIELD(ColourKey, RideColourKey::Ride),
+    SET_FIELD(Name, "river_rapids"),
+    SET_FIELD(LightFXAddLightsMagicVehicle, nullptr),
+    SET_FIELD(StartRideMusic, OpenRCT2::RideAudio::DefaultStartRideMusicChannel),
+    SET_FIELD(DesignCreateMode, TrackDesignCreateMode::Default),
+    SET_FIELD(MusicUpdateFunction, DefaultMusicUpdate),
+    SET_FIELD(Classification, RideClassification::Ride),
+    SET_FIELD(UpdateLeaveEntrance, PeepUpdateRideLeaveEntranceDefault),
 };
 // clang-format on

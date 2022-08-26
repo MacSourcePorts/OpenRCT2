@@ -22,16 +22,17 @@ namespace RCT1
     };
 
     enum class RideType : uint8_t;
+    enum class PeepSpriteType : uint8_t;
 
     colour_t GetColour(colour_t colour);
-    PeepSpriteType GetPeepSpriteType(uint8_t rct1SpriteType);
+    ::PeepSpriteType GetPeepSpriteType(PeepSpriteType rct1SpriteType);
 
     uint8_t GetRideType(RideType rideType, uint8_t vehicleType);
     VehicleColourSchemeCopyDescriptor GetColourSchemeCopyDescriptor(uint8_t vehicleType);
     bool RideTypeUsesVehicles(RideType rideType);
     bool PathIsQueue(uint8_t pathType);
     uint8_t NormalisePathAddition(uint8_t pathAdditionType);
-    uint8_t GetVehicleSubEntryIndex(uint8_t vehicleSubEntry);
+    uint8_t GetVehicleSubEntryIndex(uint8_t rct1VehicleType, uint8_t vehicleSubEntry);
 
     std::string_view GetRideTypeObject(RideType rideType);
     std::string_view GetVehicleObject(uint8_t vehicleType);

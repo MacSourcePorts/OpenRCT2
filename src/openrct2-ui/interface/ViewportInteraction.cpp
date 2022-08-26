@@ -20,6 +20,7 @@
 #include <openrct2/OpenRCT2.h>
 #include <openrct2/actions/BalloonPressAction.h>
 #include <openrct2/actions/FootpathAdditionRemoveAction.h>
+#include <openrct2/actions/FootpathRemoveAction.h>
 #include <openrct2/actions/LargeSceneryRemoveAction.h>
 #include <openrct2/actions/ParkEntranceRemoveAction.h>
 #include <openrct2/actions/SmallSceneryRemoveAction.h>
@@ -128,7 +129,7 @@ InteractionInfo ViewportInteractionGetItemLeft(const ScreenCoordsXY& screenCoord
             auto parkName = park.Name.c_str();
 
             auto ft = Formatter();
-            ft.Add<rct_string_id>(STR_STRING);
+            ft.Add<StringId>(STR_STRING);
             ft.Add<const char*>(parkName);
             SetMapTooltip(ft);
             break;
@@ -191,7 +192,7 @@ bool ViewportInteractionLeftClick(const ScreenCoordsXY& screenCoords)
                 case EntityType::Guest:
                 case EntityType::Staff:
                 {
-                    auto intent = Intent(WC_PEEP);
+                    auto intent = Intent(WindowClass::Peep);
                     intent.putExtra(INTENT_EXTRA_PEEP, entity);
                     context_open_intent(&intent);
                     break;
@@ -230,7 +231,7 @@ bool ViewportInteractionLeftClick(const ScreenCoordsXY& screenCoords)
             return true;
         }
         case ViewportInteractionItem::ParkEntrance:
-            context_open_window(WC_PARK_INFORMATION);
+            context_open_window(WindowClass::ParkInformation);
             return true;
         default:
             return false;
@@ -244,7 +245,7 @@ bool ViewportInteractionLeftClick(const ScreenCoordsXY& screenCoords)
 InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoords)
 {
     Ride* ride;
-    int32_t i, stationIndex;
+    int32_t i;
     InteractionInfo info{};
     // No click input for title screen or track manager
     if (gScreenFlags & (SCREEN_FLAGS_TITLE_DEMO | SCREEN_FLAGS_TRACK_MANAGER))
@@ -280,7 +281,7 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
             if (ride != nullptr && ride->status == RideStatus::Closed)
             {
                 auto ft = Formatter();
-                ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
+                ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
                 ride->FormatNameTo(ft);
                 SetMapTooltip(ft);
             }
@@ -310,11 +311,11 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
                 return info;
 
             auto ft = Formatter();
-            ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
+            ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
 
             if (tileElement->GetType() == TileElementType::Entrance)
             {
-                rct_string_id stringId;
+                StringId stringId;
                 if (tileElement->AsEntrance()->GetEntranceType() == ENTRANCE_TYPE_RIDE_ENTRANCE)
                 {
                     if (ride->num_stations > 1)
@@ -337,11 +338,11 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
                         stringId = STR_RIDE_EXIT;
                     }
                 }
-                ft.Add<rct_string_id>(stringId);
+                ft.Add<StringId>(stringId);
             }
             else if (tileElement->AsTrack()->IsStation())
             {
-                rct_string_id stringId;
+                StringId stringId;
                 if (ride->num_stations > 1)
                 {
                     stringId = STR_RIDE_STATION_X;
@@ -350,7 +351,7 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
                 {
                     stringId = STR_RIDE_STATION;
                 }
-                ft.Add<rct_string_id>(stringId);
+                ft.Add<StringId>(stringId);
             }
             else
             {
@@ -368,15 +369,16 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
             ride->FormatNameTo(ft);
 
             const auto& rtd = ride->GetRideTypeDescriptor();
-            ft.Add<rct_string_id>(GetRideComponentName(rtd.NameConvention.station).capitalised);
+            ft.Add<StringId>(GetRideComponentName(rtd.NameConvention.station).capitalised);
 
+            StationIndex::UnderlyingType stationIndex;
             if (tileElement->GetType() == TileElementType::Entrance)
-                stationIndex = tileElement->AsEntrance()->GetStationIndex();
+                stationIndex = tileElement->AsEntrance()->GetStationIndex().ToUnderlying();
             else
-                stationIndex = tileElement->AsTrack()->GetStationIndex();
+                stationIndex = tileElement->AsTrack()->GetStationIndex().ToUnderlying();
 
             for (i = stationIndex; i >= 0; i--)
-                if (ride->stations[i].Start.IsNull())
+                if (ride->GetStations()[i].Start.IsNull())
                     stationIndex--;
             stationIndex++;
             ft.Add<uint16_t>(stationIndex);
@@ -392,10 +394,10 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
                 if (banner != nullptr)
                 {
                     auto ft = Formatter();
-                    ft.Add<rct_string_id>(STR_MAP_TOOLTIP_BANNER_STRINGID_STRINGID);
+                    ft.Add<StringId>(STR_MAP_TOOLTIP_BANNER_STRINGID_STRINGID);
                     banner->FormatTextTo(ft);
-                    ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
-                    ft.Add<rct_string_id>(wallEntry->name);
+                    ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
+                    ft.Add<StringId>(wallEntry->name);
                     SetMapTooltip(ft);
                     return info;
                 }
@@ -411,10 +413,10 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
                 if (banner != nullptr)
                 {
                     auto ft = Formatter();
-                    ft.Add<rct_string_id>(STR_MAP_TOOLTIP_BANNER_STRINGID_STRINGID);
+                    ft.Add<StringId>(STR_MAP_TOOLTIP_BANNER_STRINGID_STRINGID);
                     banner->FormatTextTo(ft);
-                    ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
-                    ft.Add<rct_string_id>(sceneryEntry->name);
+                    ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
+                    ft.Add<StringId>(sceneryEntry->name);
                     SetMapTooltip(ft);
                     return info;
                 }
@@ -429,10 +431,10 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
                 auto* bannerEntry = get_banner_entry(banner->type);
 
                 auto ft = Formatter();
-                ft.Add<rct_string_id>(STR_MAP_TOOLTIP_BANNER_STRINGID_STRINGID);
+                ft.Add<StringId>(STR_MAP_TOOLTIP_BANNER_STRINGID_STRINGID);
                 banner->FormatTextTo(ft, /*addColour*/ true);
-                ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
-                ft.Add<rct_string_id>(bannerEntry->name);
+                ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_MODIFY);
+                ft.Add<StringId>(bannerEntry->name);
                 SetMapTooltip(ft);
                 return info;
             }
@@ -444,7 +446,8 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
 
     if (!(input_test_flag(INPUT_FLAG_6)) || !(input_test_flag(INPUT_FLAG_TOOL_ACTIVE)))
     {
-        if (window_find_by_class(WC_RIDE_CONSTRUCTION) == nullptr && window_find_by_class(WC_FOOTPATH) == nullptr)
+        if (window_find_by_class(WindowClass::RideConstruction) == nullptr
+            && window_find_by_class(WindowClass::Footpath) == nullptr)
         {
             info.SpriteType = ViewportInteractionItem::None;
             return info;
@@ -457,29 +460,29 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
         case ViewportInteractionItem::Scenery:
         {
             auto* sceneryEntry = tileElement->AsSmallScenery()->GetEntry();
-            ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
-            ft.Add<rct_string_id>(sceneryEntry->name);
+            ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
+            ft.Add<StringId>(sceneryEntry->name);
             SetMapTooltip(ft);
             return info;
         }
         case ViewportInteractionItem::Footpath:
-            ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
+            ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
             if (tileElement->AsPath()->IsQueue())
-                ft.Add<rct_string_id>(STR_QUEUE_LINE_MAP_TIP);
+                ft.Add<StringId>(STR_QUEUE_LINE_MAP_TIP);
             else
-                ft.Add<rct_string_id>(STR_FOOTPATH_MAP_TIP);
+                ft.Add<StringId>(STR_FOOTPATH_MAP_TIP);
             SetMapTooltip(ft);
             return info;
 
         case ViewportInteractionItem::FootpathItem:
         {
             auto* pathAddEntry = tileElement->AsPath()->GetAdditionEntry();
-            ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
+            ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
             if (tileElement->AsPath()->IsBroken())
             {
-                ft.Add<rct_string_id>(STR_BROKEN);
+                ft.Add<StringId>(STR_BROKEN);
             }
-            ft.Add<rct_string_id>(pathAddEntry != nullptr ? pathAddEntry->name : STR_NONE);
+            ft.Add<StringId>(pathAddEntry != nullptr ? pathAddEntry->name : STR_NONE);
             SetMapTooltip(ft);
             return info;
         }
@@ -490,24 +493,24 @@ InteractionInfo ViewportInteractionGetItemRight(const ScreenCoordsXY& screenCoor
             if (tileElement->GetType() != TileElementType::Entrance)
                 break;
 
-            ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
-            ft.Add<rct_string_id>(STR_OBJECT_SELECTION_PARK_ENTRANCE);
+            ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
+            ft.Add<StringId>(STR_OBJECT_SELECTION_PARK_ENTRANCE);
             SetMapTooltip(ft);
             return info;
 
         case ViewportInteractionItem::Wall:
         {
             auto* wallEntry = tileElement->AsWall()->GetEntry();
-            ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
-            ft.Add<rct_string_id>(wallEntry->name);
+            ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
+            ft.Add<StringId>(wallEntry->name);
             SetMapTooltip(ft);
             return info;
         }
         case ViewportInteractionItem::LargeScenery:
         {
             auto* sceneryEntry = tileElement->AsLargeScenery()->GetEntry();
-            ft.Add<rct_string_id>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
-            ft.Add<rct_string_id>(sceneryEntry->name);
+            ft.Add<StringId>(STR_MAP_TOOLTIP_STRINGID_CLICK_TO_REMOVE);
+            ft.Add<StringId>(sceneryEntry->name);
             SetMapTooltip(ft);
             return info;
         }
@@ -563,7 +566,7 @@ bool ViewportInteractionRightClick(const ScreenCoordsXY& screenCoords)
         break;
         case ViewportInteractionItem::Ride:
             tileElement = { info.Loc, info.Element };
-            ride_modify(&tileElement);
+            ride_modify(tileElement);
             break;
         case ViewportInteractionItem::Scenery:
             ViewportInteractionRemoveScenery(info.Element, info.Loc);
@@ -615,7 +618,7 @@ static void ViewportInteractionRemoveFootpath(TileElement* tileElement, const Co
 
     auto z = tileElement->GetBaseZ();
 
-    w = window_find_by_class(WC_FOOTPATH);
+    w = window_find_by_class(WindowClass::Footpath);
     if (w != nullptr)
         footpath_provisional_update();
 
@@ -626,7 +629,8 @@ static void ViewportInteractionRemoveFootpath(TileElement* tileElement, const Co
     {
         if (tileElement2->GetType() == TileElementType::Path && tileElement2->GetBaseZ() == z)
         {
-            footpath_remove({ mapCoords, z }, GAME_COMMAND_FLAG_APPLY);
+            auto action = FootpathRemoveAction({ mapCoords, z });
+            GameActions::Execute(&action);
             break;
         }
     } while (!(tileElement2++)->IsLastForTile());
@@ -733,22 +737,21 @@ PeepDistance GetClosestPeep(const ScreenCoordsXY& viewportCoords, const int32_t 
 
 static Peep* ViewportInteractionGetClosestPeep(ScreenCoordsXY screenCoords, int32_t maxDistance)
 {
-    rct_window* w;
-    rct_viewport* viewport;
-
-    w = window_find_from_point(screenCoords);
+    auto* w = window_find_from_point(screenCoords);
     if (w == nullptr)
         return nullptr;
 
-    viewport = w->viewport;
+    auto* viewport = w->viewport;
     if (viewport == nullptr || viewport->zoom >= ZoomLevel{ 2 })
         return nullptr;
 
     auto viewportCoords = viewport->ScreenToViewportCoord(screenCoords);
 
-    auto goal = GetClosestPeep<Guest>(viewportCoords, maxDistance, {});
-    goal = GetClosestPeep<Staff>(viewportCoords, maxDistance, goal);
-
+    PeepDistance goal;
+    if (!(viewport->flags & VIEWPORT_FLAG_HIDE_GUESTS))
+        goal = GetClosestPeep<Guest>(viewportCoords, maxDistance, goal);
+    if (!(viewport->flags & VIEWPORT_FLAG_HIDE_STAFF))
+        goal = GetClosestPeep<Staff>(viewportCoords, maxDistance, goal);
     return goal.peep;
 }
 

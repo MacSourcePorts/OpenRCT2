@@ -23,7 +23,7 @@ using namespace OpenRCT2;
 
 static constexpr const int32_t WW = 400;
 static constexpr const int32_t WH = 352;
-static constexpr const rct_string_id WINDOW_TITLE = STR_ABOUT;
+static constexpr const StringId WINDOW_TITLE = STR_ABOUT;
 static constexpr const int32_t TABHEIGHT = 50;
 
 // clang-format off
@@ -93,14 +93,12 @@ public:
     void OnOpen() override
     {
         widgets = _windowAboutOpenRCT2Widgets;
-        enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_TAB_ABOUT_OPENRCT2) | (1ULL << WIDX_TAB_ABOUT_RCT2)
-            | (1ULL << WIDX_COPY_BUILD_INFO) | (1ULL << WIDX_CHANGELOG) | (1ULL << WIDX_JOIN_DISCORD);
 
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
         SetPage(WINDOW_ABOUT_PAGE_OPENRCT2);
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -115,7 +113,7 @@ public:
                 OpenRCT2::GetContext()->GetUiContext()->OpenURL("https://discord.gg/ZXZd8D8");
                 break;
             case WIDX_CHANGELOG:
-                context_open_window(WC_CHANGELOG);
+                context_open_window(WindowClass::Changelog);
                 break;
             case WIDX_NEW_VERSION:
                 context_open_window_view(WV_NEW_VERSION_INFO);
@@ -140,13 +138,13 @@ public:
         // Draw tab names
         {
             auto ft = Formatter();
-            ft.Add<rct_string_id>(STR_TITLE_SEQUENCE_OPENRCT2);
+            ft.Add<StringId>(STR_TITLE_SEQUENCE_OPENRCT2);
             DrawTextWrapped(
                 &dpi, aboutOpenRCT2Coords, 87, STR_WINDOW_COLOUR_2_STRINGID, ft, { COLOUR_AQUAMARINE, TextAlignment::CENTRE });
         }
         {
             auto ft = Formatter();
-            ft.Add<rct_string_id>(STR_TITLE_SEQUENCE_RCT2);
+            ft.Add<StringId>(STR_TITLE_SEQUENCE_RCT2);
             DrawTextWrapped(
                 &dpi, aboutRCT2Coords, 87, STR_WINDOW_COLOUR_2_STRINGID, ft, { COLOUR_AQUAMARINE, TextAlignment::CENTRE });
         }
@@ -171,11 +169,9 @@ private:
         frame_no = 0;
         pressed_widgets = 0;
         widgets = _windowAboutPageWidgets[p];
-        enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_TAB_ABOUT_OPENRCT2) | (1ULL << WIDX_TAB_ABOUT_RCT2)
-            | (1ULL << WIDX_COPY_BUILD_INFO) | (1ULL << WIDX_CHANGELOG) | (1ULL << WIDX_JOIN_DISCORD);
 
         pressed_widgets |= (p == WINDOW_ABOUT_PAGE_RCT2) ? (1ULL << WIDX_TAB_ABOUT_RCT2) : (1ULL << WIDX_TAB_ABOUT_OPENRCT2);
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
         Invalidate();
     }
 
@@ -205,7 +201,6 @@ private:
         // Shows the update available button
         if (OpenRCT2::GetContext()->HasNewVersionInfo())
         {
-            enabled_widgets |= (1ULL << WIDX_NEW_VERSION);
             widgets[WIDX_NEW_VERSION].type = WindowWidgetType::Button;
             _windowAboutOpenRCT2Widgets[WIDX_NEW_VERSION].type = WindowWidgetType::Button;
         }
@@ -254,5 +249,5 @@ private:
  */
 rct_window* WindowAboutOpen()
 {
-    return WindowFocusOrCreate<AboutWindow>(WC_ABOUT, WW, WH, WF_CENTRE_SCREEN);
+    return WindowFocusOrCreate<AboutWindow>(WindowClass::About, WW, WH, WF_CENTRE_SCREEN);
 }

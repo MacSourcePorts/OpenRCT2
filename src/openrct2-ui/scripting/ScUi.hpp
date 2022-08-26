@@ -133,7 +133,7 @@ namespace OpenRCT2::Scripting
 
         std::shared_ptr<ScViewport> mainViewport_get() const
         {
-            return std::make_shared<ScViewport>(WC_MAIN_WINDOW);
+            return std::make_shared<ScViewport>(WindowClass::MainWindow);
         }
 
         std::shared_ptr<ScTileSelection> tileSelection_get() const
@@ -162,6 +162,8 @@ namespace OpenRCT2::Scripting
             auto& execInfo = _scriptEngine.GetExecInfo();
             auto owner = execInfo.GetCurrentPlugin();
 
+            owner->ThrowIfStopping();
+
             std::shared_ptr<ScWindow> scWindow = nullptr;
             auto w = window_custom_open(owner, desc);
             if (w != nullptr)
@@ -174,7 +176,7 @@ namespace OpenRCT2::Scripting
         void closeWindows(std::string classification, DukValue id)
         {
             auto cls = GetClassification(classification);
-            if (cls != WC_NULL)
+            if (cls != WindowClass::Null)
             {
                 if (id.type() == DukValue::Type::NUMBER)
                 {
@@ -311,7 +313,21 @@ namespace OpenRCT2::Scripting
         {
             auto& execInfo = _scriptEngine.GetExecInfo();
             auto owner = execInfo.GetCurrentPlugin();
-            CustomMenuItems.emplace_back(owner, text, callback);
+            CustomMenuItems.emplace_back(owner, CustomToolbarMenuItemKind::Standard, text, callback);
+        }
+
+        void registerToolboxMenuItem(const std::string& text, DukValue callback)
+        {
+            auto& execInfo = _scriptEngine.GetExecInfo();
+            auto owner = execInfo.GetCurrentPlugin();
+            if (owner->GetMetadata().Type == PluginType::Intransient)
+            {
+                CustomMenuItems.emplace_back(owner, CustomToolbarMenuItemKind::Toolbox, text, callback);
+            }
+            else
+            {
+                duk_error(_scriptEngine.GetContext(), DUK_ERR_ERROR, "Plugin must be intransient.");
+            }
         }
 
         void registerShortcut(DukValue desc)
@@ -362,13 +378,14 @@ namespace OpenRCT2::Scripting
             dukglue_register_method(ctx, &ScUi::showScenarioSelect, "showScenarioSelect");
             dukglue_register_method(ctx, &ScUi::activateTool, "activateTool");
             dukglue_register_method(ctx, &ScUi::registerMenuItem, "registerMenuItem");
+            dukglue_register_method(ctx, &ScUi::registerToolboxMenuItem, "registerToolboxMenuItem");
             dukglue_register_method(ctx, &ScUi::registerShortcut, "registerShortcut");
         }
 
     private:
-        rct_windowclass GetClassification(const std::string& key) const
+        WindowClass GetClassification(const std::string& key) const
         {
-            return WC_NULL;
+            return WindowClass::Null;
         }
 
         DukValue GetScenarioFile(std::string_view path)

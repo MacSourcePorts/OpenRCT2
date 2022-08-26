@@ -189,7 +189,7 @@ void News::ItemQueues::ArchiveCurrent()
     Archived.push_back(Current());
 
     // Invalidate the news window
-    window_invalidate_by_class(WC_RECENT_NEWS);
+    window_invalidate_by_class(WindowClass::RecentNews);
 
     // Dequeue the current news item, shift news up
     Recent.pop_front();
@@ -213,7 +213,7 @@ std::optional<CoordsXYZ> News::GetSubjectLocation(News::ItemType type, int32_t s
     {
         case News::ItemType::Ride:
         {
-            Ride* ride = get_ride(static_cast<ride_id_t>(subject));
+            Ride* ride = get_ride(RideId::FromUnderlying(subject));
             if (ride == nullptr || ride->overall_view.IsNull())
             {
                 break;
@@ -224,7 +224,7 @@ std::optional<CoordsXYZ> News::GetSubjectLocation(News::ItemType type, int32_t s
         }
         case News::ItemType::PeepOnRide:
         {
-            auto peep = TryGetEntity<Peep>(subject);
+            auto peep = TryGetEntity<Peep>(EntityId::FromUnderlying(subject));
             if (peep == nullptr)
                 break;
 
@@ -261,7 +261,7 @@ std::optional<CoordsXYZ> News::GetSubjectLocation(News::ItemType type, int32_t s
         }
         case News::ItemType::Peep:
         {
-            auto peep = TryGetEntity<Peep>(subject);
+            auto peep = TryGetEntity<Peep>(EntityId::FromUnderlying(subject));
             if (peep != nullptr)
             {
                 subjectLoc = peep->GetLocation();
@@ -305,13 +305,19 @@ News::Item* News::ItemQueues::FirstOpenOrNewSlot()
  *
  *  rct2: 0x0066DF55
  */
-News::Item* News::AddItemToQueue(News::ItemType type, rct_string_id string_id, uint32_t assoc, const Formatter& formatter)
+News::Item* News::AddItemToQueue(News::ItemType type, StringId string_id, uint32_t assoc, const Formatter& formatter)
 {
     utf8 buffer[256];
 
     // overflows possible?
     format_string(buffer, 256, string_id, formatter.Data());
     return News::AddItemToQueue(type, buffer, assoc);
+}
+
+// TODO: Use variant for assoc, requires strong type for each possible input.
+News::Item* News::AddItemToQueue(ItemType type, StringId string_id, EntityId assoc, const Formatter& formatter)
+{
+    return AddItemToQueue(type, string_id, assoc.ToUnderlying(), formatter);
 }
 
 News::Item* News::AddItemToQueue(News::ItemType type, const utf8* text, uint32_t assoc)
@@ -359,7 +365,7 @@ void News::OpenSubject(News::ItemType type, int32_t subject)
     {
         case News::ItemType::Ride:
         {
-            auto intent = Intent(WC_RIDE);
+            auto intent = Intent(WindowClass::Ride);
             intent.putExtra(INTENT_EXTRA_RIDE_ID, subject);
             context_open_intent(&intent);
             break;
@@ -367,17 +373,17 @@ void News::OpenSubject(News::ItemType type, int32_t subject)
         case News::ItemType::PeepOnRide:
         case News::ItemType::Peep:
         {
-            auto peep = TryGetEntity<Peep>(subject);
+            auto peep = TryGetEntity<Peep>(EntityId::FromUnderlying(subject));
             if (peep != nullptr)
             {
-                auto intent = Intent(WC_PEEP);
+                auto intent = Intent(WindowClass::Peep);
                 intent.putExtra(INTENT_EXTRA_PEEP, peep);
                 context_open_intent(&intent);
             }
             break;
         }
         case News::ItemType::Money:
-            context_open_window(WC_FINANCES);
+            context_open_window(WindowClass::Finances);
             break;
         case News::ItemType::Research:
         {
@@ -398,7 +404,7 @@ void News::OpenSubject(News::ItemType type, int32_t subject)
         }
         case News::ItemType::Peeps:
         {
-            auto intent = Intent(WC_GUEST_LIST);
+            auto intent = Intent(WindowClass::GuestList);
             intent.putExtra(INTENT_EXTRA_GUEST_LIST_FILTER, static_cast<int32_t>(GuestListFilterType::GuestsThinkingX));
             intent.putExtra(INTENT_EXTRA_RIDE_ID, subject);
             context_open_intent(&intent);
@@ -440,7 +446,7 @@ void News::DisableNewsItems(News::ItemType type, uint32_t assoc)
         if (type == newsItem.Type && assoc == newsItem.Assoc)
         {
             newsItem.SetFlags(News::ItemFlags::HasButton);
-            window_invalidate_by_class(WC_RECENT_NEWS);
+            window_invalidate_by_class(WindowClass::RecentNews);
         }
     });
 }

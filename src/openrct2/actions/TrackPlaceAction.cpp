@@ -24,8 +24,8 @@
 using namespace OpenRCT2::TrackMetaData;
 
 TrackPlaceAction::TrackPlaceAction(
-    NetworkRideId_t rideIndex, int32_t trackType, ride_type_t rideType, const CoordsXYZD& origin, int32_t brakeSpeed,
-    int32_t colour, int32_t seatRotation, int32_t liftHillAndAlternativeState, bool fromTrackDesign)
+    RideId rideIndex, int32_t trackType, ride_type_t rideType, const CoordsXYZD& origin, int32_t brakeSpeed, int32_t colour,
+    int32_t seatRotation, int32_t liftHillAndAlternativeState, bool fromTrackDesign)
     : _rideIndex(rideIndex)
     , _trackType(trackType)
     , _rideType(rideType)
@@ -70,14 +70,14 @@ GameActions::Result TrackPlaceAction::Query() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid ride for track placement, rideIndex = %d", EnumValue(_rideIndex));
+        log_warning("Invalid ride for track placement, rideIndex = %d", _rideIndex.ToUnderlying());
         return GameActions::Result(
             GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE, STR_NONE);
     }
     rct_ride_entry* rideEntry = get_ride_entry(ride->subtype);
     if (rideEntry == nullptr)
     {
-        log_warning("Invalid ride subtype for track placement, rideIndex = %d", EnumValue(_rideIndex));
+        log_warning("Invalid ride subtype for track placement, rideIndex = %d", _rideIndex.ToUnderlying());
         return GameActions::Result(
             GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE, STR_NONE);
     }
@@ -162,7 +162,6 @@ GameActions::Result TrackPlaceAction::Query() const
         }
     }
 
-    money32 cost = 0;
     const auto& ted = GetTrackElementDescriptor(_trackType);
     const rct_preview_track* trackBlock = ted.Block;
     uint32_t numElements = 0;
@@ -195,8 +194,7 @@ GameActions::Result TrackPlaceAction::Query() const
             if ((_origin.z & 0x0F) != 8)
             {
                 return GameActions::Result(
-                    GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE,
-                    STR_CONSTRUCTION_ERR_UNKNOWN);
+                    GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE, STR_INVALID_HEIGHT);
             }
         }
         else
@@ -204,8 +202,7 @@ GameActions::Result TrackPlaceAction::Query() const
             if ((_origin.z & 0x0F) != 0)
             {
                 return GameActions::Result(
-                    GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE,
-                    STR_CONSTRUCTION_ERR_UNKNOWN);
+                    GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE, STR_INVALID_HEIGHT);
             }
         }
     }
@@ -213,6 +210,8 @@ GameActions::Result TrackPlaceAction::Query() const
     // If that is not the case, then perform the remaining checks
     trackBlock = ted.Block;
 
+    money32 costs = 0;
+    money64 supportCosts = 0;
     for (int32_t blockIndex = 0; trackBlock->index != 0xFF; trackBlock++, blockIndex++)
     {
         auto rotatedTrack = CoordsXYZ{ CoordsXY{ trackBlock->x, trackBlock->y }.Rotate(_origin.direction), trackBlock->z };
@@ -257,7 +256,7 @@ GameActions::Result TrackPlaceAction::Query() const
             canBuild.ErrorTitle = STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE;
             return canBuild;
         }
-        cost += canBuild.Cost;
+        costs += canBuild.Cost;
 
         // When building a level crossing, remove any pre-existing path furniture.
         if (crossingMode == CREATE_CROSSING_MODE_TRACK_OVER_PATH)
@@ -346,10 +345,12 @@ GameActions::Result TrackPlaceAction::Query() const
         int32_t entranceDirections = std::get<0>(ted.SequenceProperties);
         if ((entranceDirections & TRACK_SEQUENCE_FLAG_ORIGIN) && trackBlock->index == 0)
         {
-            if (!track_add_station_element({ mapLoc, baseZ, _origin.direction }, _rideIndex, 0, _fromTrackDesign))
+            const auto addElementResult = track_add_station_element(
+                { mapLoc, baseZ, _origin.direction }, _rideIndex, 0, _fromTrackDesign);
+            if (!addElementResult.Successful)
             {
                 return GameActions::Result(
-                    GameActions::Status::Unknown, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE, gGameCommandErrorText);
+                    GameActions::Status::Unknown, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE, addElementResult.Message);
             }
         }
 
@@ -393,14 +394,14 @@ GameActions::Result TrackPlaceAction::Query() const
             supportHeight = (10 * COORDS_Z_STEP);
         }
 
-        cost += ((supportHeight / (2 * COORDS_Z_STEP)) * ride->GetRideTypeDescriptor().BuildCosts.SupportPrice) * 5;
+        supportCosts += ((supportHeight / (2 * COORDS_Z_STEP)) * ride->GetRideTypeDescriptor().BuildCosts.SupportPrice);
     }
 
-    money32 price = ride->GetRideTypeDescriptor().BuildCosts.TrackPrice;
-    price *= ted.Price;
+    money64 price = ride->GetRideTypeDescriptor().BuildCosts.TrackPrice;
+    price *= ted.PriceModifier;
 
     price >>= 16;
-    res.Cost = cost + ((price / 2) * 10);
+    res.Cost = costs + supportCosts + price;
     res.SetData(std::move(resultData));
 
     return res;
@@ -411,7 +412,7 @@ GameActions::Result TrackPlaceAction::Execute() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid ride for track placement, rideIndex = %d", EnumValue(_rideIndex));
+        log_warning("Invalid ride for track placement, rideIndex = %d", _rideIndex.ToUnderlying());
         return GameActions::Result(
             GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE, STR_NONE);
     }
@@ -419,7 +420,7 @@ GameActions::Result TrackPlaceAction::Execute() const
     rct_ride_entry* rideEntry = get_ride_entry(ride->subtype);
     if (rideEntry == nullptr)
     {
-        log_warning("Invalid ride subtype for track placement, rideIndex = %d", EnumValue(_rideIndex));
+        log_warning("Invalid ride subtype for track placement, rideIndex = %d", _rideIndex.ToUnderlying());
         return GameActions::Result(
             GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE, STR_NONE);
     }
@@ -437,7 +438,8 @@ GameActions::Result TrackPlaceAction::Execute() const
     const auto& ted = GetTrackElementDescriptor(_trackType);
     const auto& wallEdges = ted.SequenceElementAllowedWallEdges;
 
-    money32 cost = 0;
+    money32 costs = 0;
+    money64 supportCosts = 0;
     const rct_preview_track* trackBlock = ted.Block;
     for (int32_t blockIndex = 0; trackBlock->index != 0xFF; trackBlock++, blockIndex++)
     {
@@ -473,7 +475,7 @@ GameActions::Result TrackPlaceAction::Execute() const
             canBuild.ErrorTitle = STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE;
             return canBuild;
         }
-        cost += canBuild.Cost;
+        costs += canBuild.Cost;
 
         if (!(GetFlags() & GAME_COMMAND_FLAG_GHOST) && !gCheatsDisableClearanceChecks)
         {
@@ -522,7 +524,7 @@ GameActions::Result TrackPlaceAction::Execute() const
             supportHeight = (10 * COORDS_Z_STEP);
         }
 
-        cost += ((supportHeight / (2 * COORDS_Z_STEP)) * ride->GetRideTypeDescriptor().BuildCosts.SupportPrice) * 5;
+        supportCosts += (supportHeight / (2 * COORDS_Z_STEP)) * ride->GetRideTypeDescriptor().BuildCosts.SupportPrice;
 
         if (!(GetFlags() & GAME_COMMAND_FLAG_GHOST))
         {
@@ -543,9 +545,16 @@ GameActions::Result TrackPlaceAction::Execute() const
                     ride->num_block_brakes++;
                     ride->window_invalidate_flags |= RIDE_INVALIDATE_RIDE_OPERATING;
 
+                    // change the current mode to its circuit blocked equivalent
                     RideMode newMode = RideMode::ContinuousCircuitBlockSectioned;
-                    if (ride->type == RIDE_TYPE_LIM_LAUNCHED_ROLLER_COASTER)
-                        newMode = RideMode::PoweredLaunchBlockSectioned;
+                    if (ride->mode == RideMode::PoweredLaunch)
+                    {
+                        if (ride->GetRideTypeDescriptor().SupportsRideMode(RideMode::PoweredLaunchBlockSectioned)
+                            || gCheatsShowAllOperatingModes)
+                            newMode = RideMode::PoweredLaunchBlockSectioned;
+                        else
+                            newMode = RideMode::PoweredLaunch;
+                    }
 
                     auto rideSetSetting = RideSetSettingAction(ride->id, RideSetSetting::Mode, static_cast<uint8_t>(newMode));
                     GameActions::ExecuteNested(&rideSetSetting);
@@ -588,7 +597,7 @@ GameActions::Result TrackPlaceAction::Execute() const
         auto* trackElement = TileElementInsert<TrackElement>(mapLoc, quarterTile.GetBaseQuarterOccupied());
         if (trackElement == nullptr)
         {
-            log_warning("Cannot create track element for ride = %d", EnumValue(_rideIndex));
+            log_warning("Cannot create track element for ride = %d", _rideIndex.ToUnderlying());
             return GameActions::Result(
                 GameActions::Status::NoFreeElements, STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE,
                 STR_TILE_ELEMENT_LIMIT_REACHED);
@@ -693,11 +702,11 @@ GameActions::Result TrackPlaceAction::Execute() const
         map_invalidate_tile_full(mapLoc);
     }
 
-    money32 price = ride->GetRideTypeDescriptor().BuildCosts.TrackPrice;
-    price *= ted.Price;
+    money64 price = ride->GetRideTypeDescriptor().BuildCosts.TrackPrice;
+    price *= ted.PriceModifier;
 
     price >>= 16;
-    res.Cost = cost + ((price / 2) * 10);
+    res.Cost = costs + supportCosts + price;
     res.SetData(std::move(resultData));
 
     return res;

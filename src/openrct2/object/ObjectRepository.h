@@ -50,7 +50,7 @@ struct ObjectRepositoryItem
     {
         uint8_t RideFlags;
         uint8_t RideCategory[RCT2::ObjectLimits::MaxCategoriesPerRide];
-        uint8_t RideType[RCT2::ObjectLimits::MaxRideTypesPerRideEntry];
+        ride_type_t RideType[RCT2::ObjectLimits::MaxRideTypesPerRideEntry];
     } RideInfo;
     struct
     {
@@ -92,7 +92,6 @@ struct IObjectRepository
         ObjectGeneration generation, std::string_view objectName, const void* data, size_t dataSize) abstract;
 
     virtual void ExportPackedObject(OpenRCT2::IStream* stream) abstract;
-    virtual void WritePackedObjects(OpenRCT2::IStream* stream, std::vector<const ObjectRepositoryItem*>& objects) abstract;
 };
 
 [[nodiscard]] std::unique_ptr<IObjectRepository> CreateObjectRepository(

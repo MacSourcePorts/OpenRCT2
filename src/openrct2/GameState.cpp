@@ -9,6 +9,7 @@
 
 #include "GameState.h"
 
+#include "./peep/GuestPathfinding.h"
 #include "Context.h"
 #include "Editor.h"
 #include "Game.h"
@@ -20,13 +21,14 @@
 #include "actions/GameAction.h"
 #include "config/Config.h"
 #include "entity/EntityRegistry.h"
+#include "entity/PatrolArea.h"
 #include "entity/Staff.h"
 #include "interface/Screenshot.h"
 #include "localisation/Date.h"
 #include "localisation/Localisation.h"
 #include "management/NewsItem.h"
 #include "network/network.h"
-#include "platform/Platform2.h"
+#include "platform/Platform.h"
 #include "profiling/Profiling.h"
 #include "ride/Vehicle.h"
 #include "scenario/Scenario.h"
@@ -54,7 +56,7 @@ GameState::GameState()
 /**
  * Initialises the map, park etc. basically all S6 data.
  */
-void GameState::InitAll(int32_t mapSize)
+void GameState::InitAll(const TileCoordsXY& mapSize)
 {
     PROFILED_FUNCTION();
 
@@ -67,7 +69,7 @@ void GameState::InitAll(int32_t mapSize)
     banner_init();
     ride_init_all();
     ResetAllEntities();
-    staff_reset_modes();
+    UpdateConsolidatedPatrolAreas();
     date_reset();
     climate_reset(ClimateType::CoolAndWet);
     News::InitQueue();
@@ -86,6 +88,11 @@ void GameState::InitAll(int32_t mapSize)
 
     CheatsReset();
     ClearRestrictedScenery();
+
+#ifdef ENABLE_SCRIPTING
+    auto& scriptEngine = GetContext()->GetScriptEngine();
+    scriptEngine.ClearParkStorage();
+#endif
 }
 
 /**

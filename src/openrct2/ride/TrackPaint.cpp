@@ -255,12 +255,10 @@ bool track_paint_util_has_fence(
     }
 
     auto entranceLoc = TileCoordsXY(position) + offset;
+    auto entranceId = trackElement.GetStationIndex();
+    const auto& station = ride.GetStation(entranceId);
 
-    int32_t entranceId = trackElement.GetStationIndex();
-    const TileCoordsXYZD entrance = ride_get_entrance_location(&ride, entranceId);
-    const TileCoordsXYZD exit = ride_get_exit_location(&ride, entranceId);
-
-    return (entranceLoc != entrance && entranceLoc != exit);
+    return (entranceLoc != station.Entrance && entranceLoc != station.Exit);
 }
 
 void track_paint_util_paint_floor(
@@ -301,12 +299,12 @@ void track_paint_util_paint_fences(
     if (edges & EDGE_NW && track_paint_util_has_fence(EDGE_NW, position, trackElement, ride, rotation))
     {
         imageId = fenceSprites[3] | colourFlags;
-        PaintAddImageAsChild(session, imageId, 0, 0, 32, 1, 7, height, 0, 2, height + 2);
+        PaintAddImageAsChild(session, imageId, { 0, 0, height }, { 32, 1, 7 }, { 0, 2, height + 2 });
     }
     if (edges & EDGE_NE && track_paint_util_has_fence(EDGE_NE, position, trackElement, ride, rotation))
     {
         imageId = fenceSprites[0] | colourFlags;
-        PaintAddImageAsChild(session, imageId, 0, 0, 1, 32, 7, height, 2, 0, height + 2);
+        PaintAddImageAsChild(session, imageId, { 0, 0, height }, { 1, 32, 7 }, { 2, 0, height + 2 });
     }
     if (edges & EDGE_SE && track_paint_util_has_fence(EDGE_SE, position, trackElement, ride, rotation))
     {
@@ -785,7 +783,7 @@ bool track_paint_util_draw_station_covers_2(
         return false;
     }
 
-    if (!(session.Unk141E9DB & (PaintSessionFlags::IsPassedSurface | PaintSessionFlags::IsTrackPiecePreview)))
+    if (!(session.Flags & (PaintSessionFlags::PassedSurface | PaintSessionFlags::IsTrackPiecePreview)))
     {
         return false;
     }
@@ -989,12 +987,12 @@ constexpr CoordsXY defaultRightHelixUpSmallQuarterBoundLengths[4][3][2] = {
 
 constexpr CoordsXYZ defaultRightHelixUpSmallQuarterBoundOffsets[4][3][2] = {
     {
-        { { 0, 6, 0 }, { 0, 0, 0 } },
+        { { 0, 6, 8 }, { 0, 0, 0 } },
         { { 16, 16, 0 }, { 0, 0, 0 } },
-        { { 6, 0, 0 }, { 0, 0, 0 } },
+        { { 6, 0, 8 }, { 0, 0, 0 } },
     },
     {
-        { { 6, 0, 0 }, { 0, 0, 0 } },
+        { { 6, 0, 8 }, { 0, 0, 0 } },
         { { 16, 0, 0 }, { 0, 0, 0 } },
         { { 0, 6, 0 }, { 0, 27, 0 } },
     },
@@ -1004,7 +1002,7 @@ constexpr CoordsXYZ defaultRightHelixUpSmallQuarterBoundOffsets[4][3][2] = {
         { { 0, 0, 0 }, { 27, 0, 0 } },
     },
     {
-        { { 6, 0, 0 }, { 27, 0, 0 } },
+        { { 6, 0, 8 }, { 27, 0, 0 } },
         { { 0, 16, 0 }, { 0, 0, 0 } },
         { { 0, 6, 0 }, { 0, 0, 0 } },
     },
@@ -1054,14 +1052,14 @@ void track_paint_util_right_helix_up_small_quarter_tiles_paint(
 
 constexpr CoordsXYZ defaultRightHelixUpLargeQuarterBoundOffsets[4][5][2] = {
     {
-        { { 0, 6, 0 }, { 0, 0, 0 } },
+        { { 0, 6, 8 }, { 0, 0, 0 } },
         { { 0, 16, 0 }, { 0, 0, 0 } },
         { { 0, 0, 0 }, { 0, 0, 0 } },
         { { 16, 0, 0 }, { 0, 0, 0 } },
-        { { 6, 0, 0 }, { 0, 0, 0 } },
+        { { 6, 0, 8 }, { 0, 0, 0 } },
     },
     {
-        { { 6, 0, 0 }, { 0, 0, 0 } },
+        { { 6, 0, 8 }, { 0, 0, 0 } },
         { { 16, 0, 0 }, { 0, 0, 0 } },
         { { 0, 16, 0 }, { 0, 0, 0 } },
         { { 0, 0, 0 }, { 0, 0, 0 } },
@@ -1075,7 +1073,7 @@ constexpr CoordsXYZ defaultRightHelixUpLargeQuarterBoundOffsets[4][5][2] = {
         { { 0, 0, 0 }, { 27, 0, 0 } },
     },
     {
-        { { 6, 0, 0 }, { 27, 0, 0 } },
+        { { 6, 0, 8 }, { 27, 0, 0 } },
         { { 0, 0, 0 }, { 0, 0, 0 } },
         { { 16, 0, 0 }, { 0, 0, 0 } },
         { { 0, 16, 0 }, { 0, 0, 0 } },
@@ -2046,11 +2044,11 @@ void track_paint_util_spinning_tunnel_paint(paint_session& session, int8_t thick
     uint32_t imageId = trackSpritesGhostTrainSpinningTunnel[direction & 1][0][frame] | colourFlags;
     if (direction == 0 || direction == 2)
     {
-        PaintAddImageAsChild(session, imageId, 0, 0, 28, 20, thickness, height, 2, 6, height);
+        PaintAddImageAsChild(session, imageId, { 0, 0, height }, { 28, 20, thickness }, { 2, 6, height });
     }
     else
     {
-        PaintAddImageAsChild(session, imageId, 0, 0, 20, 28, thickness, height, 6, 2, height);
+        PaintAddImageAsChild(session, imageId, { 0, 0, height }, { 20, 28, thickness }, { 6, 2, height });
     }
 
     imageId = trackSpritesGhostTrainSpinningTunnel[direction & 1][1][frame] | colourFlags;
@@ -2189,7 +2187,7 @@ void track_paint_util_left_corkscrew_up_supports(paint_session& session, Directi
  */
 void PaintTrack(paint_session& session, Direction direction, int32_t height, const TrackElement& trackElement)
 {
-    ride_id_t rideIndex = trackElement.GetRideIndex();
+    RideId rideIndex = trackElement.GetRideIndex();
     auto ride = get_ride(rideIndex);
     if (ride == nullptr)
     {
@@ -2221,19 +2219,19 @@ void PaintTrack(paint_session& session, Direction direction, int32_t height, con
             }
         }
 
-#ifdef __ENABLE_LIGHTFX__
         if (lightfx_is_available())
         {
             uint8_t zOffset = 16;
-            if (ride->type == RIDE_TYPE_TOILETS || ride->type == RIDE_TYPE_FIRST_AID || ride->type == RIDE_TYPE_CASH_MACHINE)
+            const auto& rtd = ride->GetRideTypeDescriptor();
+            if (rtd.HasFlag(RIDE_TYPE_FLAG_IS_TOILET) || rtd.HasFlag(RIDE_TYPE_FLAG_IS_FIRST_AID)
+                || rtd.HasFlag(RIDE_TYPE_FLAG_IS_CASH_MACHINE))
                 zOffset = 23;
 
             if (ride->type == RIDE_TYPE_INFORMATION_KIOSK)
                 LightFxAddKioskLights(session.MapPosition, height, zOffset);
-            else if (RideTypeDescriptors[ride->type].HasFlag(RIDE_TYPE_FLAG_IS_SHOP))
+            else if (RideTypeDescriptors[ride->type].HasFlag(RIDE_TYPE_FLAG_IS_SHOP_OR_FACILITY))
                 LightFxAddShopLights(session.MapPosition, trackElement.GetDirection(), height, zOffset);
         }
-#endif
 
         session.InteractionType = ViewportInteractionItem::Ride;
         session.TrackColours[SCHEME_TRACK] = SPRITE_ID_PALETTE_COLOUR_2(

@@ -26,7 +26,7 @@
 #include "../localisation/Formatter.h"
 #include "../localisation/Formatting.h"
 #include "../park/ParkFile.h"
-#include "../platform/Platform2.h"
+#include "../platform/Platform.h"
 #include "../scenario/Scenario.h"
 #include "../scripting/ScriptEngine.h"
 #include "../ui/UiContext.h"
@@ -42,7 +42,7 @@
 // This string specifies which version of network stream current build uses.
 // It is used for making sure only compatible builds get connected, even within
 // single OpenRCT2 version.
-#define NETWORK_STREAM_VERSION "14"
+#define NETWORK_STREAM_VERSION "8"
 #define NETWORK_STREAM_ID OPENRCT2_VERSION "-" NETWORK_STREAM_VERSION
 
 static Peep* _pickup_peep = nullptr;
@@ -154,12 +154,12 @@ bool NetworkBase::Init()
 {
     status = NETWORK_STATUS_READY;
 
-    ServerName = std::string();
-    ServerDescription = std::string();
-    ServerGreeting = std::string();
-    ServerProviderName = std::string();
-    ServerProviderEmail = std::string();
-    ServerProviderWebsite = std::string();
+    ServerName.clear();
+    ServerDescription.clear();
+    ServerGreeting.clear();
+    ServerProviderName.clear();
+    ServerProviderEmail.clear();
+    ServerProviderWebsite.clear();
     return true;
 }
 
@@ -202,6 +202,11 @@ void NetworkBase::Close()
         _serverTickData.clear();
         _pendingPlayerLists.clear();
         _pendingPlayerInfo.clear();
+
+#    ifdef ENABLE_SCRIPTING
+        auto& scriptEngine = GetContext().GetScriptEngine();
+        scriptEngine.RemoveNetworkPlugins();
+#    endif
 
         gfx_invalidate_screen();
 
@@ -285,7 +290,7 @@ bool NetworkBase::BeginClient(const std::string& host, uint16_t port)
         Console::WriteLine("Key generated, saving private bits as %s", keyPath.c_str());
 
         const auto keysDirectory = network_get_keys_directory();
-        if (!platform_ensure_directory_exists(keysDirectory.c_str()))
+        if (!Platform::EnsureDirectoryExists(keysDirectory.c_str()))
         {
             log_error("Unable to create directory %s.", keysDirectory.c_str());
             return false;
@@ -403,16 +408,17 @@ bool NetworkBase::BeginServer(uint16_t port, const std::string& address)
     _advertiser = CreateServerAdvertiser(listening_port);
 
     game_load_scripts();
+    game_notify_map_changed();
 
     return true;
 }
 
-int32_t NetworkBase::GetMode()
+int32_t NetworkBase::GetMode() const noexcept
 {
     return mode;
 }
 
-int32_t NetworkBase::GetStatus()
+int32_t NetworkBase::GetStatus() const noexcept
 {
     return status;
 }
@@ -430,17 +436,17 @@ NetworkAuth NetworkBase::GetAuthStatus()
     return NetworkAuth::None;
 }
 
-uint32_t NetworkBase::GetServerTick()
+uint32_t NetworkBase::GetServerTick() const noexcept
 {
     return _serverState.tick;
 }
 
-uint8_t NetworkBase::GetPlayerID()
+uint8_t NetworkBase::GetPlayerID() const noexcept
 {
     return player_id;
 }
 
-NetworkConnection* NetworkBase::GetPlayerConnection(uint8_t id)
+NetworkConnection* NetworkBase::GetPlayerConnection(uint8_t id) const
 {
     auto player = GetPlayerByID(id);
     if (player != nullptr)
@@ -458,7 +464,7 @@ void NetworkBase::Update()
     _closeLock = true;
 
     // Update is not necessarily called per game tick, maintain our own delta time
-    uint32_t ticks = platform_get_ticks();
+    uint32_t ticks = Platform::GetTicks();
     _currentDeltaTime = std::max<uint32_t>(ticks - _lastUpdateTime, 1);
     _lastUpdateTime = ticks;
 
@@ -517,7 +523,7 @@ void NetworkBase::UpdateServer()
         }
     }
 
-    uint32_t ticks = platform_get_ticks();
+    uint32_t ticks = Platform::GetTicks();
     if (ticks > last_ping_sent_time + 3000)
     {
         Server_Send_PING();
@@ -554,7 +560,7 @@ void NetworkBase::UpdateClient()
                         char str_resolving[256];
                         format_string(str_resolving, 256, STR_MULTIPLAYER_RESOLVING, nullptr);
 
-                        auto intent = Intent(WC_NETWORK_STATUS);
+                        auto intent = Intent(WindowClass::NetworkStatus);
                         intent.putExtra(INTENT_EXTRA_MESSAGE, std::string{ str_resolving });
                         intent.putExtra(INTENT_EXTRA_CALLBACK, []() -> void { ::GetContext()->GetNetwork().Close(); });
                         context_open_intent(&intent);
@@ -569,12 +575,12 @@ void NetworkBase::UpdateClient()
                         char str_connecting[256];
                         format_string(str_connecting, 256, STR_MULTIPLAYER_CONNECTING, nullptr);
 
-                        auto intent = Intent(WC_NETWORK_STATUS);
+                        auto intent = Intent(WindowClass::NetworkStatus);
                         intent.putExtra(INTENT_EXTRA_MESSAGE, std::string{ str_connecting });
                         intent.putExtra(INTENT_EXTRA_CALLBACK, []() -> void { ::GetContext()->GetNetwork().Close(); });
                         context_open_intent(&intent);
 
-                        server_connect_time = platform_get_ticks();
+                        server_connect_time = Platform::GetTicks();
                     }
                     break;
                 }
@@ -586,7 +592,7 @@ void NetworkBase::UpdateClient()
                     char str_authenticating[256];
                     format_string(str_authenticating, 256, STR_MULTIPLAYER_AUTHENTICATING, nullptr);
 
-                    auto intent = Intent(WC_NETWORK_STATUS);
+                    auto intent = Intent(WindowClass::NetworkStatus);
                     intent.putExtra(INTENT_EXTRA_MESSAGE, std::string{ str_authenticating });
                     intent.putExtra(INTENT_EXTRA_CALLBACK, []() -> void { ::GetContext()->GetNetwork().Close(); });
                     context_open_intent(&intent);
@@ -601,7 +607,7 @@ void NetworkBase::UpdateClient()
                     }
 
                     Close();
-                    context_force_close_window_by_class(WC_NETWORK_STATUS);
+                    context_force_close_window_by_class(WindowClass::NetworkStatus);
                     context_show_error(STR_UNABLE_TO_CONNECT_TO_SERVER, STR_NONE, {});
                     break;
                 }
@@ -615,7 +621,7 @@ void NetworkBase::UpdateClient()
                 // Do not show disconnect message window when password window closed/canceled
                 if (_serverConnection->AuthStatus == NetworkAuth::RequirePassword)
                 {
-                    context_force_close_window_by_class(WC_NETWORK_STATUS);
+                    context_force_close_window_by_class(WindowClass::NetworkStatus);
                 }
                 else
                 {
@@ -631,16 +637,16 @@ void NetworkBase::UpdateClient()
                         format_string(str_disconnected, 256, STR_MULTIPLAYER_DISCONNECTED_NO_REASON, nullptr);
                     }
 
-                    auto intent = Intent(WC_NETWORK_STATUS);
+                    auto intent = Intent(WindowClass::NetworkStatus);
                     intent.putExtra(INTENT_EXTRA_MESSAGE, std::string{ str_disconnected });
                     context_open_intent(&intent);
                 }
-                window_close_by_class(WC_MULTIPLAYER);
+                window_close_by_class(WindowClass::Multiplayer);
                 Close();
             }
             else
             {
-                uint32_t ticks = platform_get_ticks();
+                uint32_t ticks = Platform::GetTicks();
                 if (ticks - _lastSentHeartbeat >= 3000)
                 {
                     Client_Send_HEARTBEAT(*_serverConnection);
@@ -653,19 +659,14 @@ void NetworkBase::UpdateClient()
     }
 }
 
-std::vector<std::unique_ptr<NetworkPlayer>>::iterator NetworkBase::GetPlayerIteratorByID(uint8_t id)
+auto NetworkBase::GetPlayerIteratorByID(uint8_t id) const
 {
-    auto it = std::find_if(player_list.begin(), player_list.end(), [&id](std::unique_ptr<NetworkPlayer> const& player) {
+    return std::find_if(player_list.begin(), player_list.end(), [id](std::unique_ptr<NetworkPlayer> const& player) {
         return player->Id == id;
     });
-    if (it != player_list.end())
-    {
-        return it;
-    }
-    return player_list.end();
 }
 
-NetworkPlayer* NetworkBase::GetPlayerByID(uint8_t id)
+NetworkPlayer* NetworkBase::GetPlayerByID(uint8_t id) const
 {
     auto it = GetPlayerIteratorByID(id);
     if (it != player_list.end())
@@ -675,18 +676,13 @@ NetworkPlayer* NetworkBase::GetPlayerByID(uint8_t id)
     return nullptr;
 }
 
-std::vector<std::unique_ptr<NetworkGroup>>::iterator NetworkBase::GetGroupIteratorByID(uint8_t id)
+auto NetworkBase::GetGroupIteratorByID(uint8_t id) const
 {
-    auto it = std::find_if(
-        group_list.begin(), group_list.end(), [&id](std::unique_ptr<NetworkGroup> const& group) { return group->Id == id; });
-    if (it != group_list.end())
-    {
-        return it;
-    }
-    return group_list.end();
+    return std::find_if(
+        group_list.begin(), group_list.end(), [id](std::unique_ptr<NetworkGroup> const& group) { return group->Id == id; });
 }
 
-NetworkGroup* NetworkBase::GetGroupByID(uint8_t id)
+NetworkGroup* NetworkBase::GetGroupByID(uint8_t id) const
 {
     auto it = GetGroupIteratorByID(id);
     if (it != group_list.end())
@@ -712,7 +708,7 @@ const char* NetworkBase::FormatChat(NetworkPlayer* fromplayer, const char* text)
     return formatted.c_str();
 }
 
-void NetworkBase::SendPacketToClients(const NetworkPacket& packet, bool front, bool gameCmd)
+void NetworkBase::SendPacketToClients(const NetworkPacket& packet, bool front, bool gameCmd) const
 {
     for (auto& client_connection : client_connection_list)
     {
@@ -727,8 +723,7 @@ void NetworkBase::SendPacketToClients(const NetworkPacket& packet, bool front, b
                 continue;
             }
         }
-        auto packetCopy = packet;
-        client_connection->QueuePacket(std::move(packetCopy), front);
+        client_connection->QueuePacket(packet, front);
     }
 }
 
@@ -765,7 +760,7 @@ bool NetworkBase::CheckSRAND(uint32_t tick, uint32_t srand0)
     return true;
 }
 
-bool NetworkBase::IsDesynchronised()
+bool NetworkBase::IsDesynchronised() const noexcept
 {
     return _serverState.state == NetworkServerState::Desynced;
 }
@@ -782,7 +777,7 @@ bool NetworkBase::CheckDesynchronizaton()
         char str_desync[256];
         format_string(str_desync, 256, STR_MULTIPLAYER_DESYNC, nullptr);
 
-        auto intent = Intent(WC_NETWORK_STATUS);
+        auto intent = Intent(WindowClass::NetworkStatus);
         intent.putExtra(INTENT_EXTRA_MESSAGE, std::string{ str_desync });
         context_open_intent(&intent);
 
@@ -804,7 +799,7 @@ void NetworkBase::RequestStateSnapshot()
     Client_Send_RequestGameState(_serverState.desyncTick);
 }
 
-NetworkServerState_t NetworkBase::GetServerState() const
+NetworkServerState_t NetworkBase::GetServerState() const noexcept
 {
     return _serverState;
 }
@@ -930,7 +925,7 @@ uint8_t NetworkBase::GetGroupIDByHash(const std::string& keyhash)
     return groupId;
 }
 
-uint8_t NetworkBase::GetDefaultGroup()
+uint8_t NetworkBase::GetDefaultGroup() const noexcept
 {
     return default_group;
 }
@@ -948,7 +943,7 @@ void NetworkBase::SaveGroups()
     if (GetMode() == NETWORK_MODE_SERVER)
     {
         auto env = GetContext().GetPlatformEnvironment();
-        auto path = Path::Combine(env->GetDirectoryPath(DIRBASE::USER), "groups.json");
+        auto path = Path::Combine(env->GetDirectoryPath(DIRBASE::USER), u8"groups.json");
 
         json_t jsonGroups = json_t::array();
         for (auto& group : group_list)
@@ -1008,7 +1003,7 @@ void NetworkBase::LoadGroups()
     group_list.clear();
 
     auto env = GetContext().GetPlatformEnvironment();
-    auto path = Path::Combine(env->GetDirectoryPath(DIRBASE::USER), "groups.json");
+    auto path = Path::Combine(env->GetDirectoryPath(DIRBASE::USER), u8"groups.json");
 
     json_t jsonGroupConfig;
     if (File::Exists(path))
@@ -1060,7 +1055,7 @@ std::string NetworkBase::BeginLog(const std::string& directory, const std::strin
         throw std::runtime_error("strftime failed");
     }
 
-    platform_ensure_directory_exists(Path::Combine(directory, midName).c_str());
+    Platform::EnsureDirectoryExists(Path::Combine(directory, midName).c_str());
     return Path::Combine(directory, midName, filename);
 }
 
@@ -1096,13 +1091,7 @@ void NetworkBase::BeginChatLog()
     auto env = GetContext().GetPlatformEnvironment();
     auto directory = env->GetDirectoryPath(DIRBASE::USER, DIRID::LOG_CHAT);
     _chatLogPath = BeginLog(directory, "", _chatLogFilenameFormat);
-
-#    if defined(_WIN32) && !defined(__MINGW32__)
-    auto pathW = String::ToWideChar(_chatLogPath.c_str());
-    _chat_log_fs.open(pathW.c_str(), std::ios::out | std::ios::app);
-#    else
-    _chat_log_fs.open(_chatLogPath, std::ios::out | std::ios::app);
-#    endif
+    _chat_log_fs.open(fs::u8path(_chatLogPath), std::ios::out | std::ios::app);
 }
 
 void NetworkBase::AppendChatLog(std::string_view s)
@@ -1123,13 +1112,7 @@ void NetworkBase::BeginServerLog()
     auto env = GetContext().GetPlatformEnvironment();
     auto directory = env->GetDirectoryPath(DIRBASE::USER, DIRID::LOG_SERVER);
     _serverLogPath = BeginLog(directory, ServerName, _serverLogFilenameFormat);
-
-#    if defined(_WIN32) && !defined(__MINGW32__)
-    auto pathW = String::ToWideChar(_serverLogPath.c_str());
-    _server_log_fs.open(pathW.c_str(), std::ios::out | std::ios::app | std::ios::binary);
-#    else
-    _server_log_fs.open(_serverLogPath, std::ios::out | std::ios::app | std::ios::binary);
-#    endif
+    _server_log_fs.open(fs::u8path(_serverLogPath), std::ios::out | std::ios::app | std::ios::binary);
 
     // Log server start event
     utf8 logMessage[256];
@@ -1205,10 +1188,10 @@ void NetworkBase::Client_Send_AUTH(
     const std::string& name, const std::string& password, const std::string& pubkey, const std::vector<uint8_t>& signature)
 {
     NetworkPacket packet(NetworkCommand::Auth);
-    packet.WriteString(network_get_version().c_str());
-    packet.WriteString(name.c_str());
-    packet.WriteString(password.c_str());
-    packet.WriteString(pubkey.c_str());
+    packet.WriteString(network_get_version());
+    packet.WriteString(name);
+    packet.WriteString(password);
+    packet.WriteString(pubkey);
     assert(signature.size() <= static_cast<size_t>(UINT32_MAX));
     packet << static_cast<uint32_t>(signature.size());
     packet.Write(signature.data(), signature.size());
@@ -1364,7 +1347,7 @@ void NetworkBase::Server_Send_AUTH(NetworkConnection& connection)
     packet << static_cast<uint32_t>(connection.AuthStatus) << new_playerid;
     if (connection.AuthStatus == NetworkAuth::BadVersion)
     {
-        packet.WriteString(network_get_version().c_str());
+        packet.WriteString(network_get_version());
     }
     connection.QueuePacket(std::move(packet));
     if (connection.AuthStatus != NetworkAuth::Ok && connection.AuthStatus != NetworkAuth::RequirePassword)
@@ -1517,7 +1500,7 @@ void NetworkBase::Server_Send_TICK()
     if (flags & NETWORK_TICK_FLAG_CHECKSUMS)
     {
         EntitiesChecksum checksum = GetAllEntitiesChecksum();
-        packet.WriteString(checksum.ToString().c_str());
+        packet.WriteString(checksum.ToString());
     }
 
     SendPacketToClients(packet);
@@ -1555,11 +1538,11 @@ void NetworkBase::Client_Send_PING()
 
 void NetworkBase::Server_Send_PING()
 {
-    last_ping_sent_time = platform_get_ticks();
+    last_ping_sent_time = Platform::GetTicks();
     NetworkPacket packet(NetworkCommand::Ping);
     for (auto& client_connection : client_connection_list)
     {
-        client_connection->PingTime = platform_get_ticks();
+        client_connection->PingTime = Platform::GetTicks();
     }
     SendPacketToClients(packet, true);
 }
@@ -1608,14 +1591,14 @@ void NetworkBase::Server_Send_GAMEINFO(NetworkConnection& connection)
 
     jsonObj["provider"] = jsonProvider;
 
-    packet.WriteString(jsonObj.dump().c_str());
+    packet.WriteString(jsonObj.dump());
     packet << _serverState.gamestateSnapshotsEnabled;
 
 #    endif
     connection.QueuePacket(std::move(packet));
 }
 
-void NetworkBase::Server_Send_SHOWERROR(NetworkConnection& connection, rct_string_id title, rct_string_id message)
+void NetworkBase::Server_Send_SHOWERROR(NetworkConnection& connection, StringId title, StringId message)
 {
     NetworkPacket packet(NetworkCommand::ShowError);
     packet << title << message;
@@ -2163,7 +2146,7 @@ void NetworkBase::Client_Handle_TOKEN(NetworkConnection& connection, NetworkPack
     // when process dump gets collected at some point in future.
     _key.Unload();
 
-    Client_Send_AUTH(gConfigNetwork.player_name.c_str(), gCustomPassword.c_str(), pubkey.c_str(), signature);
+    Client_Send_AUTH(gConfigNetwork.player_name, gCustomPassword, pubkey, signature);
 }
 
 void NetworkBase::Server_Handle_REQUEST_GAMESTATE(NetworkConnection& connection, NetworkPacket& packet)
@@ -2314,14 +2297,6 @@ void NetworkBase::Client_Handle_OBJECTS_LIST(NetworkConnection& connection, Netw
         _missingObjects.clear();
     }
 
-    if (totalObjects > OBJECT_ENTRY_COUNT)
-    {
-        connection.SetLastDisconnectReason(STR_MULTIPLAYER_SERVER_INVALID_REQUEST);
-        connection.Disconnect();
-        log_warning("Server sent invalid amount of objects");
-        return;
-    }
-
     if (totalObjects > 0)
     {
         char objectListMsg[256];
@@ -2331,7 +2306,7 @@ void NetworkBase::Client_Handle_OBJECTS_LIST(NetworkConnection& connection, Netw
         };
         format_string(objectListMsg, 256, STR_MULTIPLAYER_RECEIVING_OBJECTS_LIST, &args);
 
-        auto intent = Intent(WC_NETWORK_STATUS);
+        auto intent = Intent(WindowClass::NetworkStatus);
         intent.putExtra(INTENT_EXTRA_MESSAGE, std::string{ objectListMsg });
         intent.putExtra(INTENT_EXTRA_CALLBACK, []() -> void { ::GetContext()->GetNetwork().Close(); });
         context_open_intent(&intent);
@@ -2450,12 +2425,12 @@ void NetworkBase::Client_Handle_GAMESTATE(NetworkConnection& connection, Network
 
             std::string outputPath = GetContext().GetPlatformEnvironment()->GetDirectoryPath(DIRBASE::USER, DIRID::LOG_DESYNCS);
 
-            platform_ensure_directory_exists(outputPath.c_str());
+            Platform::EnsureDirectoryExists(outputPath.c_str());
 
             char uniqueFileName[128] = {};
             snprintf(
                 uniqueFileName, sizeof(uniqueFileName), "desync_%llu_%u.txt",
-                static_cast<long long unsigned>(platform_get_datetime_now_utc()), tick);
+                static_cast<long long unsigned>(Platform::GetDatetimeNowUTC()), tick);
 
             std::string outputFile = Path::Combine(outputPath, uniqueFileName);
 
@@ -2469,7 +2444,7 @@ void NetworkBase::Client_Handle_GAMESTATE(NetworkConnection& connection, Network
                 char str_desync[1024];
                 format_string(str_desync, sizeof(str_desync), STR_DESYNC_REPORT, ft.Data());
 
-                auto intent = Intent(WC_NETWORK_STATUS);
+                auto intent = Intent(WindowClass::NetworkStatus);
                 intent.putExtra(INTENT_EXTRA_MESSAGE, std::string{ str_desync });
                 context_open_intent(&intent);
             }
@@ -2481,20 +2456,6 @@ void NetworkBase::Server_Handle_MAPREQUEST(NetworkConnection& connection, Networ
 {
     uint32_t size;
     packet >> size;
-    if (size > OBJECT_ENTRY_COUNT)
-    {
-        connection.SetLastDisconnectReason(STR_MULTIPLAYER_CLIENT_INVALID_REQUEST);
-        connection.Disconnect();
-        std::string playerName = "(unknown)";
-        if (connection.Player != nullptr)
-        {
-            playerName = connection.Player->Name;
-        }
-        std::string text = std::string("Player ") + playerName + std::string(" requested invalid amount of objects");
-        AppendServerLog(text);
-        log_warning(text.c_str());
-        return;
-    }
     log_verbose("Client requested %u objects", size);
     auto& repo = GetContext().GetObjectRepository();
     for (uint32_t i = 0; i < size; i++)
@@ -2691,7 +2652,7 @@ void NetworkBase::Client_Handle_MAP([[maybe_unused]] NetworkConnection& connecti
     };
     format_string(str_downloading_map, 256, STR_MULTIPLAYER_DOWNLOADING_MAP, downloading_map_args);
 
-    auto intent = Intent(WC_NETWORK_STATUS);
+    auto intent = Intent(WindowClass::NetworkStatus);
     intent.putExtra(INTENT_EXTRA_MESSAGE, std::string{ str_downloading_map });
     intent.putExtra(INTENT_EXTRA_CALLBACK, []() -> void { ::GetContext()->GetNetwork().Close(); });
     context_open_intent(&intent);
@@ -2702,7 +2663,10 @@ void NetworkBase::Client_Handle_MAP([[maybe_unused]] NetworkConnection& connecti
         // Allow queue processing of game actions again.
         GameActions::ResumeQueue();
 
-        context_force_close_window_by_class(WC_NETWORK_STATUS);
+        context_force_close_window_by_class(WindowClass::NetworkStatus);
+        game_unload_scripts();
+        game_notify_map_change();
+
         bool has_to_free = false;
         uint8_t* data = &chunk_buffer[0];
         size_t data_size = size;
@@ -2711,6 +2675,7 @@ void NetworkBase::Client_Handle_MAP([[maybe_unused]] NetworkConnection& connecti
         {
             game_load_init();
             game_load_scripts();
+            game_notify_map_changed();
             _serverState.tick = gCurrentTicks;
             // window_network_status_open("Loaded new map from network");
             _serverState.state = NetworkServerState::Ok;
@@ -2769,7 +2734,7 @@ bool NetworkBase::LoadMap(IStream* stream)
 bool NetworkBase::SaveMap(IStream* stream, const std::vector<const ObjectRepositoryItem*>& objects) const
 {
     bool result = false;
-    viewport_set_saved_view();
+    PrepareMapForSave();
     try
     {
         auto exporter = std::make_unique<ParkFileExporter>();
@@ -3034,7 +2999,7 @@ void NetworkBase::Client_Handle_PING([[maybe_unused]] NetworkConnection& connect
 
 void NetworkBase::Server_Handle_PING(NetworkConnection& connection, [[maybe_unused]] NetworkPacket& packet)
 {
-    int32_t ping = platform_get_ticks() - connection.PingTime;
+    int32_t ping = Platform::GetTicks() - connection.PingTime;
     if (ping < 0)
     {
         ping = 0;
@@ -3042,7 +3007,7 @@ void NetworkBase::Server_Handle_PING(NetworkConnection& connection, [[maybe_unus
     if (connection.Player != nullptr)
     {
         connection.Player->Ping = ping;
-        window_invalidate_by_number(WC_PLAYER, connection.Player->Id);
+        window_invalidate_by_number(WindowClass::Player, connection.Player->Id);
     }
 }
 
@@ -3061,7 +3026,7 @@ void NetworkBase::Client_Handle_PINGLIST([[maybe_unused]] NetworkConnection& con
             player->Ping = ping;
         }
     }
-    window_invalidate_by_class(WC_PLAYER);
+    window_invalidate_by_class(WindowClass::Player);
 }
 
 void NetworkBase::Client_Handle_SETDISCONNECTMSG(NetworkConnection& connection, NetworkPacket& packet)
@@ -3080,7 +3045,7 @@ void NetworkBase::Server_Handle_GAMEINFO(NetworkConnection& connection, [[maybe_
 
 void NetworkBase::Client_Handle_SHOWERROR([[maybe_unused]] NetworkConnection& connection, NetworkPacket& packet)
 {
-    rct_string_id title, message;
+    StringId title, message;
     packet >> title >> message;
     context_show_error(title, message, {});
 }
@@ -3109,7 +3074,7 @@ void NetworkBase::Client_Handle_EVENT([[maybe_unused]] NetworkConnection& connec
         {
             auto playerName = packet.ReadString();
             auto message = FormatStringId(STR_MULTIPLAYER_PLAYER_HAS_JOINED_THE_GAME, playerName);
-            chat_history_add(message.c_str());
+            chat_history_add(message);
             break;
         }
         case SERVER_EVENT_PLAYER_DISCONNECTED:
@@ -3125,7 +3090,7 @@ void NetworkBase::Client_Handle_EVENT([[maybe_unused]] NetworkConnection& connec
             {
                 message = FormatStringId(STR_MULTIPLAYER_PLAYER_HAS_DISCONNECTED_WITH_REASON, playerName, reason);
             }
-            chat_history_add(message.c_str());
+            chat_history_add(message);
             break;
         }
     }
@@ -3323,7 +3288,7 @@ int32_t network_get_player_last_action(uint32_t index, int32_t time)
     auto& network = OpenRCT2::GetContext()->GetNetwork();
     Guard::IndexInRange(index, network.player_list);
 
-    if (time && platform_get_ticks() > network.player_list[index]->LastActionTime + time)
+    if (time && Platform::GetTicks() > network.player_list[index]->LastActionTime + time)
     {
         return -999;
     }
@@ -3336,7 +3301,7 @@ void network_set_player_last_action(uint32_t index, GameCommand command)
     Guard::IndexInRange(index, network.player_list);
 
     network.player_list[index]->LastAction = static_cast<int32_t>(NetworkActions::FindCommand(command));
-    network.player_list[index]->LastActionTime = platform_get_ticks();
+    network.player_list[index]->LastActionTime = Platform::GetTicks();
 }
 
 CoordsXYZ network_get_player_last_action_coord(uint32_t index)
@@ -3449,7 +3414,7 @@ void network_chat_show_server_greeting()
         thread_local std::string greeting_formatted;
         greeting_formatted.assign("{OUTLINE}{GREEN}");
         greeting_formatted += greeting;
-        chat_history_add(greeting_formatted.c_str());
+        chat_history_add(greeting_formatted);
     }
 }
 
@@ -3495,7 +3460,7 @@ GameActions::Result network_set_player_group(
             userManager.Save();
         }
 
-        window_invalidate_by_number(WC_PLAYER, playerId);
+        window_invalidate_by_number(WindowClass::Player, playerId);
 
         // Log set player group event
         NetworkPlayer* game_command_player = network.GetPlayerByID(actionPlayerId);
@@ -3685,7 +3650,7 @@ int32_t network_get_num_actions()
     return static_cast<int32_t>(NetworkActions::Actions.size());
 }
 
-rct_string_id network_get_action_name_string_id(uint32_t index)
+StringId network_get_action_name_string_id(uint32_t index)
 {
     if (index < NetworkActions::Actions.size())
     {
@@ -3856,7 +3821,7 @@ void network_send_password(const std::string& password)
     // Don't keep private key in memory. There's no need and it may get leaked
     // when process dump gets collected at some point in future.
     network._key.Unload();
-    network.Client_Send_AUTH(gConfigNetwork.player_name.c_str(), password, pubkey.c_str(), signature);
+    network.Client_Send_AUTH(gConfigNetwork.player_name, password, pubkey, signature);
 }
 
 void network_set_password(const char* password)
@@ -3880,17 +3845,17 @@ void network_append_server_log(const utf8* text)
 static u8string network_get_keys_directory()
 {
     auto env = GetContext()->GetPlatformEnvironment();
-    return Path::Combine(env->GetDirectoryPath(DIRBASE::USER), "keys");
+    return Path::Combine(env->GetDirectoryPath(DIRBASE::USER), u8"keys");
 }
 
 static u8string network_get_private_key_path(u8string_view playerName)
 {
-    return Path::Combine(network_get_keys_directory(), u8string(playerName) + ".privkey");
+    return Path::Combine(network_get_keys_directory(), u8string(playerName) + u8".privkey");
 }
 
 static u8string network_get_public_key_path(u8string_view playerName, u8string_view hash)
 {
-    const auto filename = u8string(playerName) + "-" + u8string(hash) + ".pubkey";
+    const auto filename = u8string(playerName) + u8"-" + u8string(hash) + u8".pubkey";
     return Path::Combine(network_get_keys_directory(), filename);
 }
 
@@ -4029,7 +3994,7 @@ int32_t network_get_player_id(uint32_t index)
 }
 money32 network_get_player_money_spent(uint32_t index)
 {
-    return MONEY(0, 0);
+    return 0.00_GBP;
 }
 std::string network_get_player_ip_address(uint32_t id)
 {
@@ -4111,7 +4076,7 @@ int32_t network_get_num_actions()
 {
     return 0;
 }
-rct_string_id network_get_action_name_string_id(uint32_t index)
+StringId network_get_action_name_string_id(uint32_t index)
 {
     return -1;
 }

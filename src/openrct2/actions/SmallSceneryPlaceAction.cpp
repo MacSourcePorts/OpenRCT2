@@ -29,12 +29,14 @@
 #include "SmallSceneryRemoveAction.h"
 
 SmallSceneryPlaceAction::SmallSceneryPlaceAction(
-    const CoordsXYZD& loc, uint8_t quadrant, ObjectEntryIndex sceneryType, uint8_t primaryColour, uint8_t secondaryColour)
+    const CoordsXYZD& loc, uint8_t quadrant, ObjectEntryIndex sceneryType, uint8_t primaryColour, uint8_t secondaryColour,
+    uint8_t tertiaryColour)
     : _loc(loc)
     , _quadrant(quadrant)
     , _sceneryType(sceneryType)
     , _primaryColour(primaryColour)
     , _secondaryColour(secondaryColour)
+    , _tertiaryColour(tertiaryColour)
 {
 }
 
@@ -103,7 +105,8 @@ GameActions::Result SmallSceneryPlaceAction::Query() const
             GameActions::Status::NoFreeElements, STR_CANT_POSITION_THIS_HERE, STR_TILE_ELEMENT_LIMIT_REACHED);
     }
 
-    if (!_trackDesignDrawingPreview && (_loc.x > GetMapSizeMaxXY() || _loc.y > GetMapSizeMaxXY()))
+    auto maxSizeMax = GetMapSizeMaxXY();
+    if (!_trackDesignDrawingPreview && (_loc.x > maxSizeMax.x || _loc.y > maxSizeMax.y))
     {
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_CANT_POSITION_THIS_HERE, STR_NONE);
     }
@@ -132,8 +135,8 @@ GameActions::Result SmallSceneryPlaceAction::Query() const
     }
     else
     {
-        loc2.x += SceneryQuadrantOffsets[quadrant & 3].x - 1;
-        loc2.y += SceneryQuadrantOffsets[quadrant & 3].y - 1;
+        loc2.x += SceneryQuadrantOffsets[quadrant & 3].x;
+        loc2.y += SceneryQuadrantOffsets[quadrant & 3].y;
     }
     landHeight = tile_element_height(loc2);
     waterHeight = tile_element_water_height(loc2);
@@ -268,7 +271,7 @@ GameActions::Result SmallSceneryPlaceAction::Query() const
     res.SetData(SmallSceneryPlaceActionResult{ groundFlags, 0, 0 });
 
     res.Expenditure = ExpenditureType::Landscaping;
-    res.Cost = (sceneryEntry->price * 10) + canBuild.Cost;
+    res.Cost = sceneryEntry->price + canBuild.Cost;
 
     return res;
 }
@@ -326,8 +329,8 @@ GameActions::Result SmallSceneryPlaceAction::Execute() const
     }
     else
     {
-        x2 += SceneryQuadrantOffsets[quadrant & 3].x - 1;
-        y2 += SceneryQuadrantOffsets[quadrant & 3].y - 1;
+        x2 += SceneryQuadrantOffsets[quadrant & 3].x;
+        y2 += SceneryQuadrantOffsets[quadrant & 3].y;
     }
     landHeight = tile_element_height({ x2, y2 });
     waterHeight = tile_element_water_height({ x2, y2 });
@@ -402,7 +405,7 @@ GameActions::Result SmallSceneryPlaceAction::Execute() const
     }
 
     res.Expenditure = ExpenditureType::Landscaping;
-    res.Cost = (sceneryEntry->price * 10) + canBuild.Cost;
+    res.Cost = sceneryEntry->price + canBuild.Cost;
 
     auto* sceneryElement = TileElementInsert<SmallSceneryElement>(
         CoordsXYZ{ _loc, zLow }, quarterTile.GetBaseQuarterOccupied());
@@ -418,6 +421,7 @@ GameActions::Result SmallSceneryPlaceAction::Execute() const
     sceneryElement->SetAge(0);
     sceneryElement->SetPrimaryColour(_primaryColour);
     sceneryElement->SetSecondaryColour(_secondaryColour);
+    sceneryElement->SetTertiaryColour(_tertiaryColour);
     sceneryElement->SetClearanceZ(sceneryElement->GetBaseZ() + sceneryEntry->height + 7);
     sceneryElement->SetGhost(GetFlags() & GAME_COMMAND_FLAG_GHOST);
     if (supportsRequired)

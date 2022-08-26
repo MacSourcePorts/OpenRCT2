@@ -14,7 +14,7 @@
 #include "../core/Path.hpp"
 #include "../interface/Window.h"
 #include "../localisation/Localisation.h"
-#include "../platform/platform.h"
+#include "../platform/Platform.h"
 #include "../title/TitleScreen.h"
 #include "zlib.h"
 
@@ -49,101 +49,6 @@ int32_t mph_to_dmps(int32_t mph)
 {
     // 1 mph = 4.4704 decimeters/s
     return (mph * 73243) >> 14;
-}
-
-bool filename_valid_characters(const utf8* filename)
-{
-    for (int32_t i = 0; filename[i] != '\0'; i++)
-    {
-        if (filename[i] == '\\' || filename[i] == '/' || filename[i] == ':' || filename[i] == '?' || filename[i] == '*'
-            || filename[i] == '<' || filename[i] == '>' || filename[i] == '|')
-            return false;
-    }
-    return true;
-}
-
-utf8* path_get_directory(const utf8* path)
-{
-    // Find the last slash or backslash in the path
-    char* filename = const_cast<char*>(strrchr(path, *PATH_SEPARATOR));
-    char* filename_posix = const_cast<char*>(strrchr(path, '/'));
-    filename = filename < filename_posix ? filename_posix : filename;
-
-    // If the path is invalid (e.g. just a file name), return NULL
-    if (filename == nullptr)
-    {
-        return nullptr;
-    }
-
-    char* directory = _strdup(path);
-    safe_strtrunc(directory, strlen(path) - strlen(filename) + 2);
-
-    return directory;
-}
-
-const char* path_get_filename(const utf8* path)
-{
-    // Find last slash or backslash in the path
-    char* filename = const_cast<char*>(strrchr(path, *PATH_SEPARATOR));
-    char* filename_posix = const_cast<char*>(strchr(path, '/'));
-    filename = filename < filename_posix ? filename_posix : filename;
-
-    // Checks if the path is valid (e.g. not just a file name)
-    if (filename == nullptr)
-    {
-        // Return the input string to keep things working
-        return path;
-    }
-
-    // Increase pointer by one, to get rid of the slashes
-    filename++;
-
-    return filename;
-}
-
-void path_set_extension(utf8* path, const utf8* newExtension, size_t size)
-{
-    // Remove existing extension (check first if there is one)
-    if (!Path::GetExtension(path).empty())
-        path_remove_extension(path);
-    // Append new extension
-    path_append_extension(path, newExtension, size);
-}
-
-void path_append_extension(utf8* path, const utf8* newExtension, size_t size)
-{
-    // Skip to the dot if the extension starts with a pattern (starts with "*.")
-    if (newExtension[0] == '*')
-        newExtension++;
-
-    // Append a dot to the filename if the new extension doesn't start with it
-    if (newExtension[0] != '.')
-        safe_strcat(path, ".", size);
-
-    // Append the extension to the path
-    safe_strcat(path, newExtension, size);
-}
-
-void path_remove_extension(utf8* path)
-{
-    // Find last dot in filename, and replace it with a null-terminator
-    char* lastDot = const_cast<char*>(strrchr(path_get_filename(path), '.'));
-    if (lastDot != nullptr)
-        *lastDot = '\0';
-    else
-        log_warning("No extension found. (path = %s)", path);
-}
-
-void path_end_with_separator(utf8* path, size_t size)
-{
-    size_t length = strnlen(path, size);
-    if (length >= size - 1)
-        return;
-
-    if ((length == 0) || ((path[length - 1] != *PATH_SEPARATOR) && path[length - 1] != '/'))
-    {
-        safe_strcat(path, PATH_SEPARATOR, size);
-    }
 }
 
 int32_t bitscanforward(int32_t source)
@@ -468,16 +373,6 @@ char* safe_strcat(char* destination, const char* source, size_t size)
     return result;
 }
 
-char* safe_strcat_path(char* destination, const char* source, size_t size)
-{
-    path_end_with_separator(destination, size);
-    if (source[0] == *PATH_SEPARATOR)
-    {
-        source = source + 1;
-    }
-    return safe_strcat(destination, source, size);
-}
-
 #if defined(_WIN32)
 char* strcasestr(const char* haystack, const char* needle)
 {
@@ -526,6 +421,15 @@ uint32_t util_rand()
 {
     thread_local std::mt19937 _prng(std::random_device{}());
     return _prng();
+}
+
+// Returns a random floating point number from the Standard Normal Distribution; mean of 0 and standard deviation of 1.
+// TODO: In C++20 this can be templated, where the standard deviation is passed as a value template argument.
+float util_rand_normal_distributed()
+{
+    thread_local std::mt19937 _prng{ std::random_device{}() };
+    thread_local std::normal_distribution<float> _distributor{ 0.0f, 1.0f };
+    return _distributor(_prng);
 }
 
 constexpr size_t CHUNK = 128 * 1024;

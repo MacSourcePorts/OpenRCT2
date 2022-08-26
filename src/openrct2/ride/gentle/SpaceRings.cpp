@@ -36,8 +36,6 @@ static constexpr const uint32_t space_rings_fence_sprites[] = {
 static void paint_space_rings_structure(
     paint_session& session, const Ride& ride, uint8_t direction, uint32_t segment, int32_t height)
 {
-    const TileElement* savedTileElement = static_cast<const TileElement*>(session.CurrentlyDrawnItem);
-
     uint32_t vehicleIndex = (segment - direction) & 0x3;
 
     if (ride.num_stations == 0 || vehicleIndex < ride.num_vehicles)
@@ -46,17 +44,17 @@ static void paint_space_rings_structure(
 
         int32_t frameNum = direction;
 
-        uint32_t baseImageId = rideEntry->vehicles[0].base_image_id;
+        uint32_t baseImageId = rideEntry->Cars[0].base_image_id;
         auto vehicle = GetEntity<Vehicle>(ride.vehicles[vehicleIndex]);
         if (ride.lifecycle_flags & RIDE_LIFECYCLE_ON_TRACK && vehicle != nullptr)
         {
             session.InteractionType = ViewportInteractionItem::Entity;
-            session.CurrentlyDrawnItem = vehicle;
+            session.CurrentlyDrawnEntity = vehicle;
             frameNum += static_cast<int8_t>(vehicle->Pitch) * 4;
         }
 
         uint32_t imageColourFlags = session.TrackColours[SCHEME_MISC];
-        if ((ride.colour_scheme_type & 3) != RIDE_COLOUR_SCHEME_DIFFERENT_PER_TRAIN)
+        if ((ride.colour_scheme_type & 3) != RIDE_COLOUR_SCHEME_MODE_DIFFERENT_PER_TRAIN)
         {
             vehicleIndex = 0;
         }
@@ -77,12 +75,12 @@ static void paint_space_rings_structure(
             {
                 imageColourFlags = SPRITE_ID_PALETTE_COLOUR_2(rider->TshirtColour, rider->TrousersColour);
                 imageId = ((baseImageId & 0x7FFFF) + 352 + frameNum) | imageColourFlags;
-                PaintAddImageAsChild(session, imageId, 0, 0, 20, 20, 23, height, -10, -10, height);
+                PaintAddImageAsChild(session, imageId, { 0, 0, height }, { 20, 20, 23 }, { -10, -10, height });
             }
         }
     }
 
-    session.CurrentlyDrawnItem = savedTileElement;
+    session.CurrentlyDrawnEntity = nullptr;
     session.InteractionType = ViewportInteractionItem::Ride;
 }
 

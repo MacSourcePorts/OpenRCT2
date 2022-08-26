@@ -21,7 +21,7 @@
 #include "../ride/ShopItem.h"
 #include "../world/Park.h"
 
-RideSetPriceAction::RideSetPriceAction(ride_id_t rideIndex, money16 price, bool primaryPrice)
+RideSetPriceAction::RideSetPriceAction(RideId rideIndex, money16 price, bool primaryPrice)
     : _rideIndex(rideIndex)
     , _price(price)
     , _primaryPrice(primaryPrice)
@@ -54,14 +54,14 @@ GameActions::Result RideSetPriceAction::Query() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid game command, ride_id = %u", uint32_t(_rideIndex));
+        log_warning("Invalid game command, ride_id = %u", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
     }
 
     rct_ride_entry* rideEntry = get_ride_entry(ride->subtype);
     if (rideEntry == nullptr)
     {
-        log_warning("Invalid game command for ride %u", uint32_t(_rideIndex));
+        log_warning("Invalid game command for ride %u", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
     }
 
@@ -76,14 +76,14 @@ GameActions::Result RideSetPriceAction::Execute() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid game command, ride_id = %u", uint32_t(_rideIndex));
+        log_warning("Invalid game command, ride_id = %u", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
     }
 
     rct_ride_entry* rideEntry = get_ride_entry(ride->subtype);
     if (rideEntry == nullptr)
     {
-        log_warning("Invalid game command for ride %u", uint32_t(_rideIndex));
+        log_warning("Invalid game command for ride %u", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
     }
 
@@ -97,13 +97,15 @@ GameActions::Result RideSetPriceAction::Execute() const
     if (_primaryPrice)
     {
         shopItem = ShopItem::Admission;
-        if (ride->type != RIDE_TYPE_TOILETS)
+
+        const auto& rtd = ride->GetRideTypeDescriptor();
+        if (!rtd.HasFlag(RIDE_TYPE_FLAG_IS_TOILET))
         {
             shopItem = rideEntry->shop_item[0];
             if (shopItem == ShopItem::None)
             {
                 ride->price[0] = _price;
-                window_invalidate_by_class(WC_RIDE);
+                window_invalidate_by_class(WindowClass::Ride);
                 return res;
             }
         }
@@ -111,7 +113,7 @@ GameActions::Result RideSetPriceAction::Execute() const
         if (!shop_item_has_common_price(shopItem))
         {
             ride->price[0] = _price;
-            window_invalidate_by_class(WC_RIDE);
+            window_invalidate_by_class(WindowClass::Ride);
             return res;
         }
     }
@@ -124,7 +126,7 @@ GameActions::Result RideSetPriceAction::Execute() const
             if ((ride->lifecycle_flags & RIDE_LIFECYCLE_ON_RIDE_PHOTO) == 0)
             {
                 ride->price[1] = _price;
-                window_invalidate_by_class(WC_RIDE);
+                window_invalidate_by_class(WindowClass::Ride);
                 return res;
             }
         }
@@ -132,7 +134,7 @@ GameActions::Result RideSetPriceAction::Execute() const
         if (!shop_item_has_common_price(shopItem))
         {
             ride->price[1] = _price;
-            window_invalidate_by_class(WC_RIDE);
+            window_invalidate_by_class(WindowClass::Ride);
             return res;
         }
     }
@@ -149,7 +151,8 @@ void RideSetPriceAction::RideSetCommonPrice(ShopItem shopItem) const
     {
         auto invalidate = false;
         auto rideEntry = get_ride_entry(ride.subtype);
-        if (ride.type == RIDE_TYPE_TOILETS && shopItem == ShopItem::Admission)
+        const auto& rtd = ride.GetRideTypeDescriptor();
+        if (rtd.HasFlag(RIDE_TYPE_FLAG_IS_TOILET) && shopItem == ShopItem::Admission)
         {
             if (ride.price[0] != _price)
             {
@@ -180,7 +183,7 @@ void RideSetPriceAction::RideSetCommonPrice(ShopItem shopItem) const
         }
         if (invalidate)
         {
-            window_invalidate_by_number(WC_RIDE, EnumValue(ride.id));
+            window_invalidate_by_number(WindowClass::Ride, ride.id.ToUnderlying());
         }
     }
 }

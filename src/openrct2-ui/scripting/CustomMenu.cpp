@@ -194,7 +194,7 @@ namespace OpenRCT2::Scripting
 
             if (info.SpriteType == ViewportInteractionItem::Entity && info.Entity != nullptr)
             {
-                obj.Set("entityId", info.Entity->sprite_index);
+                obj.Set("entityId", info.Entity->sprite_index.ToUnderlying());
             }
             else if (info.Element != nullptr)
             {
@@ -261,14 +261,14 @@ namespace OpenRCT2::Scripting
                 customTool.onUp = dukValue["onUp"];
                 customTool.onFinish = dukValue["onFinish"];
 
-                auto toolbarWindow = window_find_by_class(WC_TOP_TOOLBAR);
+                auto toolbarWindow = window_find_by_class(WindowClass::TopToolbar);
                 if (toolbarWindow != nullptr)
                 {
                     // Use a widget that does not exist on top toolbar but also make sure it isn't -1 as that
                     // prevents abort from being called.
-                    rct_widgetindex widgetIndex = -2;
+                    WidgetIndex widgetIndex = -2;
                     tool_cancel();
-                    tool_set(toolbarWindow, widgetIndex, static_cast<Tool>(customTool.Cursor));
+                    tool_set(*toolbarWindow, widgetIndex, static_cast<Tool>(customTool.Cursor));
                     ActiveCustomTool = std::move(customTool);
                     ActiveCustomTool->Start();
                 }
@@ -279,7 +279,6 @@ namespace OpenRCT2::Scripting
             duk_error(scriptEngine.GetContext(), DUK_ERR_ERROR, "Invalid parameters.");
         }
     }
-
 } // namespace OpenRCT2::Scripting
 
 #endif

@@ -14,7 +14,7 @@
 #include "../ride/Ride.h"
 #include "../ride/RideData.h"
 
-RideSetSettingAction::RideSetSettingAction(ride_id_t rideIndex, RideSetSetting setting, uint8_t value)
+RideSetSettingAction::RideSetSettingAction(RideId rideIndex, RideSetSetting setting, uint8_t value)
     : _rideIndex(rideIndex)
     , _setting(setting)
     , _value(value)
@@ -45,7 +45,7 @@ GameActions::Result RideSetSettingAction::Query() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid ride: #%d.", EnumValue(_rideIndex));
+        log_warning("Invalid ride: #%u.", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_CANT_CHANGE_OPERATING_MODE, STR_NONE);
     }
 
@@ -155,7 +155,7 @@ GameActions::Result RideSetSettingAction::Execute() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid ride: #%d.", EnumValue(_rideIndex));
+        log_warning("Invalid ride: #%u.", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_CANT_CHANGE_OPERATING_MODE, STR_NONE);
     }
 
@@ -205,7 +205,7 @@ GameActions::Result RideSetSettingAction::Execute() const
             if (_value != ride->music)
             {
                 ride->music = _value;
-                ride->music_tune_id = 0xFF;
+                ride->music_tune_id = TUNE_ID_NULL;
             }
             break;
         case RideSetSetting::LiftHillSpeed:
@@ -236,7 +236,7 @@ GameActions::Result RideSetSettingAction::Execute() const
         auto location = ride->overall_view.ToTileCentre();
         res.Position = { location, tile_element_height(location) };
     }
-    window_invalidate_by_number(WC_RIDE, EnumValue(_rideIndex));
+    window_invalidate_by_number(WindowClass::Ride, _rideIndex.ToUnderlying());
     return res;
 }
 
@@ -273,7 +273,7 @@ bool RideSetSettingAction::ride_is_valid_operation_option(Ride* ride) const
     return _value >= minValue && _value <= maxValue;
 }
 
-rct_string_id RideSetSettingAction::GetOperationErrorMessage(Ride* ride) const
+StringId RideSetSettingAction::GetOperationErrorMessage(Ride* ride) const
 {
     switch (ride->mode)
     {

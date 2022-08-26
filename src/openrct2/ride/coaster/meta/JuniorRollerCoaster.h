@@ -20,7 +20,7 @@ constexpr const RideTypeDescriptor JuniorRollerCoasterRTD =
     SET_FIELD(AlternateType, RIDE_TYPE_NULL),
     SET_FIELD(Category, RIDE_CATEGORY_ROLLERCOASTER),
     SET_FIELD(EnabledTrackPieces, { TRACK_STRAIGHT, TRACK_STATION_END, TRACK_LIFT_HILL,TRACK_LIFT_HILL_CURVE, TRACK_FLAT_ROLL_BANKING, TRACK_SLOPE, TRACK_SLOPE_LONG, TRACK_SLOPE_CURVE, TRACK_S_BEND, TRACK_CURVE_SMALL, TRACK_CURVE, TRACK_HELIX_SMALL, TRACK_BRAKES, TRACK_BLOCK_BRAKES, TRACK_BOOSTER}),
-    SET_FIELD(ExtraTrackPieces, {TRACK_SLOPE_STEEP, TRACK_ON_RIDE_PHOTO}),
+    SET_FIELD(ExtraTrackPieces, {TRACK_SLOPE_STEEP_UP, TRACK_SLOPE_STEEP_DOWN, TRACK_ON_RIDE_PHOTO}),
     SET_FIELD(CoveredTrackPieces, {}),
     SET_FIELD(StartTrackPiece, TrackElemType::EndStation),
     SET_FIELD(TrackPaintFunction, get_track_paint_function_junior_rc),
@@ -40,7 +40,7 @@ constexpr const RideTypeDescriptor JuniorRollerCoasterRTD =
     SET_FIELD(RatingsCalculationFunction, ride_ratings_calculate_junior_roller_coaster),
     SET_FIELD(RatingsMultipliers, { 50, 30, 10 }),
     SET_FIELD(UpkeepCosts, { 40, 20, 80, 8, 3, 5 }),
-    SET_FIELD(BuildCosts, { 45, 4, 40, }),
+    SET_FIELD(BuildCosts, { 22.50_GBP, 2.00_GBP, 40, }),
     SET_FIELD(DefaultPrices, { 20, 20 }),
     SET_FIELD(DefaultMusic, MUSIC_OBJECT_SUMMER),
     SET_FIELD(PhotoItem, ShopItem::Photo),
@@ -54,5 +54,6 @@ constexpr const RideTypeDescriptor JuniorRollerCoasterRTD =
     )),
     SET_FIELD(ColourPreview, { SPR_RIDE_DESIGN_PREVIEW_JUNIOR_ROLLER_COASTER_TRACK, SPR_RIDE_DESIGN_PREVIEW_JUNIOR_ROLLER_COASTER_SUPPORTS }),
     SET_FIELD(ColourKey, RideColourKey::Ride),
+    SET_FIELD(Name, "junior_rc"),
 };
 // clang-format on

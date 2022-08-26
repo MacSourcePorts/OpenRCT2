@@ -26,10 +26,10 @@
 
 // Monthly research funding costs
 const money32 research_cost_table[RESEARCH_FUNDING_COUNT] = {
-    MONEY(0, 00),   // No funding
-    MONEY(100, 00), // Minimum funding
-    MONEY(200, 00), // Normal funding
-    MONEY(400, 00), // Maximum funding
+    0.00_GBP,   // No funding
+    100.00_GBP, // Minimum funding
+    200.00_GBP, // Normal funding
+    400.00_GBP, // Maximum funding
 };
 
 static constexpr const int32_t dword_988E60[static_cast<int32_t>(ExpenditureType::Count)] = {
@@ -215,11 +215,11 @@ void finance_init()
     gWeeklyProfitAverageDividend = 0;
     gWeeklyProfitAverageDivisor = 0;
 
-    gInitialCash = MONEY(10000, 00); // Cheat detection
+    gInitialCash = 10000.00_GBP; // Cheat detection
 
-    gCash = MONEY(10000, 00);
-    gBankLoan = MONEY(10000, 00);
-    gMaxBankLoan = MONEY(20000, 00);
+    gCash = 10000.00_GBP;
+    gBankLoan = 10000.00_GBP;
+    gMaxBankLoan = 20000.00_GBP;
 
     gHistoricalProfit = 0;
 
@@ -280,7 +280,7 @@ void finance_update_daily_profit()
     gWeeklyProfitAverageDividend += gCurrentProfit;
     gWeeklyProfitAverageDivisor += 1;
 
-    window_invalidate_by_class(WC_FINANCES);
+    window_invalidate_by_class(WindowClass::Finances);
 }
 
 money64 finance_get_initial_cash()
@@ -336,7 +336,7 @@ void finance_shift_expenditure_table()
         gExpenditureTable[0][i] = 0;
     }
 
-    window_invalidate_by_class(WC_FINANCES);
+    window_invalidate_by_class(WindowClass::Finances);
 }
 
 /**

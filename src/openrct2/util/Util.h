@@ -23,15 +23,6 @@ int32_t metres_to_feet(int32_t metres);
 int32_t mph_to_kmph(int32_t mph);
 int32_t mph_to_dmps(int32_t mph);
 
-bool filename_valid_characters(const utf8* filename);
-
-char* path_get_directory(const utf8* path);
-const char* path_get_filename(const utf8* path);
-void path_set_extension(utf8* path, const utf8* newExtension, size_t size);
-void path_append_extension(utf8* path, const utf8* newExtension, size_t size);
-void path_remove_extension(utf8* path);
-void path_end_with_separator(utf8* path, size_t size);
-
 bool sse41_available();
 bool avx2_available();
 
@@ -44,7 +35,6 @@ int32_t strlogicalcmp(char const* a, char const* b);
 utf8* safe_strtrunc(utf8* text, size_t size);
 char* safe_strcpy(char* destination, const char* source, size_t num);
 char* safe_strcat(char* destination, const char* source, size_t size);
-char* safe_strcat_path(char* destination, const char* source, size_t size);
 #if defined(_WIN32)
 char* strcasestr(const char* haystack, const char* needle);
 #endif
@@ -52,6 +42,7 @@ char* strcasestr(const char* haystack, const char* needle);
 bool str_is_null_or_empty(const char* str);
 
 uint32_t util_rand();
+float util_rand_normal_distributed();
 
 bool util_gzip_compress(FILE* source, FILE* dest);
 std::vector<uint8_t> Gzip(const void* data, const size_t dataLen);

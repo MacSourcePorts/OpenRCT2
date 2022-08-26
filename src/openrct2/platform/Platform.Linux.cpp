@@ -31,8 +31,7 @@
 #    include "../OpenRCT2.h"
 #    include "../core/Path.hpp"
 #    include "../localisation/Language.h"
-#    include "Platform2.h"
-#    include "platform.h"
+#    include "Platform.h"
 
 namespace Platform
 {
@@ -48,7 +47,7 @@ namespace Platform
                 if (path.empty())
                 {
                     auto home = GetFolderPath(SPECIAL_FOLDER::USER_HOME);
-                    path = Path::Combine(home, ".config");
+                    path = Path::Combine(home, u8".config");
                 }
                 return path;
             }
@@ -64,6 +63,7 @@ namespace Platform
         static const utf8* searchLocations[] = {
             "./doc",
             "/usr/share/doc/openrct2",
+            DOCDIR,
         };
         for (auto searchLocation : searchLocations)
         {
@@ -166,9 +166,9 @@ namespace Platform
         return exePath;
     }
 
-    utf8* StrDecompToPrecomp(utf8* input)
+    u8string StrDecompToPrecomp(u8string_view input)
     {
-        return input;
+        return u8string(input);
     }
 
     bool HandleSpecialCommandLineArgument(const char* argument)
@@ -280,13 +280,13 @@ namespace Platform
         const char* steamRoot = getenv("STEAMROOT");
         if (steamRoot != nullptr)
         {
-            return Path::Combine(steamRoot, "ubuntu12_32/steamapps/content");
+            return Path::Combine(steamRoot, u8"ubuntu12_32/steamapps/content");
         }
 
         const char* localSharePath = getenv("XDG_DATA_HOME");
         if (localSharePath != nullptr)
         {
-            auto steamPath = Path::Combine(localSharePath, "Steam/ubuntu12_32/steamapps/content");
+            auto steamPath = Path::Combine(localSharePath, u8"Steam/ubuntu12_32/steamapps/content");
             if (Path::DirectoryExists(steamPath))
             {
                 return steamPath;
@@ -299,13 +299,13 @@ namespace Platform
             return {};
         }
 
-        auto steamPath = Path::Combine(homeDir, ".local/share/Steam/ubuntu12_32/steamapps/content");
+        auto steamPath = Path::Combine(homeDir, u8".local/share/Steam/ubuntu12_32/steamapps/content");
         if (Path::DirectoryExists(steamPath))
         {
             return steamPath;
         }
 
-        steamPath = Path::Combine(homeDir, ".steam/steam/ubuntu12_32/steamapps/content");
+        steamPath = Path::Combine(homeDir, u8".steam/steam/ubuntu12_32/steamapps/content");
         if (Path::DirectoryExists(steamPath))
         {
             return steamPath;

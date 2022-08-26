@@ -224,7 +224,7 @@ void InGameConsole::WriteLine(const std::string& input, FormatToken colourFormat
     {
         splitPos = input.find('\n', stringOffset);
         line = input.substr(stringOffset, splitPos - stringOffset);
-        _consoleLines.push_back(colourCodepoint + line);
+        _consoleLines.emplace_back(colourCodepoint + line);
         stringOffset = splitPos + 1;
     }
 
@@ -274,17 +274,17 @@ void InGameConsole::Draw(rct_drawpixelinfo* dpi) const
         return;
 
     // Set font
-    uint8_t textColour = NOT_TRANSLUCENT(ThemeGetColour(WC_CONSOLE, 1));
+    uint8_t textColour = NOT_TRANSLUCENT(ThemeGetColour(WindowClass::Console, 1));
     const int32_t lineHeight = InGameConsoleGetLineHeight();
     const int32_t maxLines = GetNumVisibleLines();
 
     // This is something of a hack to ensure the text is actually black
     // as opposed to a desaturated grey
-    thread_local std::string colourFormatStr;
-    colourFormatStr.clear();
+    thread_local std::string _colourFormatStr;
+    _colourFormatStr.clear();
     if (textColour == COLOUR_BLACK)
     {
-        colourFormatStr = "{BLACK}";
+        _colourFormatStr = "{BLACK}";
     }
 
     // TTF looks far better without the outlines
@@ -304,7 +304,7 @@ void InGameConsole::Draw(rct_drawpixelinfo* dpi) const
         FilterPaletteID::Palette51);
 
     // Paint background colour.
-    uint8_t backgroundColour = ThemeGetColour(WC_CONSOLE, 0);
+    uint8_t backgroundColour = ThemeGetColour(WindowClass::Console, 0);
     gfx_fill_rect_inset(dpi, { _consoleTopLeft, _consoleBottomRight }, backgroundColour, INSET_RECT_FLAG_FILL_NONE);
     gfx_fill_rect_inset(
         dpi, { _consoleTopLeft + ScreenCoordsXY{ 1, 1 }, _consoleBottomRight - ScreenCoordsXY{ 1, 1 } }, backgroundColour,
@@ -317,7 +317,7 @@ void InGameConsole::Draw(rct_drawpixelinfo* dpi) const
     for (std::size_t i = 0; i < _consoleLines.size() && i < static_cast<size_t>(maxLines); i++)
     {
         const size_t index = i + _consoleScrollPos;
-        lineBuffer = colourFormatStr + _consoleLines[index];
+        lineBuffer = _colourFormatStr + _consoleLines[index];
         gfx_draw_string(dpi, screenCoords, lineBuffer.c_str(), { textColour, InGameConsoleGetFontSpriteBase() });
         screenCoords.y += lineHeight;
     }
@@ -325,7 +325,7 @@ void InGameConsole::Draw(rct_drawpixelinfo* dpi) const
     screenCoords.y = _consoleBottomRight.y - lineHeight - CONSOLE_EDGE_PADDING - 1;
 
     // Draw current line
-    lineBuffer = colourFormatStr + _consoleCurrentLine;
+    lineBuffer = _colourFormatStr + _consoleCurrentLine;
     gfx_draw_string_no_formatting(dpi, screenCoords, lineBuffer.c_str(), { TEXT_COLOUR_255, InGameConsoleGetFontSpriteBase() });
 
     // Draw caret

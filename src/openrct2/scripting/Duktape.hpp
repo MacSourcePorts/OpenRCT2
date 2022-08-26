@@ -286,6 +286,12 @@ namespace OpenRCT2::Scripting
         return DukValue::take_from_stack(ctx);
     }
 
+    template<> inline DukValue ToDuk(duk_context* ctx, const uint16_t& value)
+    {
+        duk_push_int(ctx, value);
+        return DukValue::take_from_stack(ctx);
+    }
+
     template<> inline DukValue ToDuk(duk_context* ctx, const int32_t& value)
     {
         duk_push_int(ctx, value);
@@ -328,7 +334,23 @@ namespace OpenRCT2::Scripting
         return result;
     }
 
+    template<> MapRange inline FromDuk(const DukValue& d)
+    {
+        MapRange range;
+        range.Point1 = FromDuk<CoordsXY>(d["leftTop"]);
+        range.Point2 = FromDuk<CoordsXY>(d["rightBottom"]);
+        return range.Normalise();
+    }
+
     template<> DukValue inline ToDuk(duk_context* ctx, const CoordsXY& coords)
+    {
+        DukObject dukCoords(ctx);
+        dukCoords.Set("x", coords.x);
+        dukCoords.Set("y", coords.y);
+        return dukCoords.Take();
+    }
+
+    template<> DukValue inline ToDuk(duk_context* ctx, const TileCoordsXY& coords)
     {
         DukObject dukCoords(ctx);
         dukCoords.Set("x", coords.x);
@@ -395,6 +417,14 @@ namespace OpenRCT2::Scripting
         dukGForces.Set("lateralG", value.LateralG);
         dukGForces.Set("verticalG", value.VerticalG);
         return dukGForces.Take();
+    }
+
+    template<> inline DukValue ToDuk(duk_context* ctx, const VehicleSpriteGroup& value)
+    {
+        DukObject dukSpriteGroup(ctx);
+        dukSpriteGroup.Set("imageId", value.imageId);
+        dukSpriteGroup.Set("spriteNumImages", OpenRCT2::Entity::Yaw::NumSpritesPrecision(value.spritePrecision));
+        return dukSpriteGroup.Take();
     }
 
     template<> inline CoordsXYZD FromDuk(const DukValue& value)

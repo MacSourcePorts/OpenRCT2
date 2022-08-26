@@ -13,9 +13,10 @@
 #include "../Game.h"
 #include "../OpenRCT2.h"
 #include "../common.h"
+#include "../config/Config.h"
 #include "../core/Guard.hpp"
 #include "../object/Object.h"
-#include "../platform/platform.h"
+#include "../platform/Platform.h"
 #include "../sprites.h"
 #include "../util/Util.h"
 #include "../world/Climate.h"
@@ -24,6 +25,8 @@
 #include "LightFX.h"
 
 #include <cstring>
+
+GamePalette gPalette;
 
 const PaletteMap& PaletteMap::GetDefault()
 {
@@ -36,6 +39,7 @@ const PaletteMap& PaletteMap::GetDefault()
         {
             data[i] = static_cast<uint8_t>(i);
         }
+        initialised = true;
     }
     return defaultMap;
 }
@@ -137,7 +141,7 @@ thread_local uint8_t gOtherPalette[256] = {
 };
 
 // Originally 0x9ABE04
-uint8_t text_palette[0x8] = {
+uint8_t gTextPalette[0x8] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
@@ -801,13 +805,11 @@ void UpdatePalette(const uint8_t* colours, int32_t start_index, int32_t num_colo
         uint8_t g = colours[1];
         uint8_t b = colours[0];
 
-#ifdef __ENABLE_LIGHTFX__
         if (lightfx_is_available())
         {
             lightfx_apply_palette_filter(i, &r, &g, &b);
         }
         else
-#endif
         {
             float night = gDayNightCycle;
             if (night >= 0 && gClimateLightningFlash == 0)
@@ -835,4 +837,29 @@ void UpdatePalette(const uint8_t* colours, int32_t start_index, int32_t num_colo
     {
         drawing_engine_set_palette(gPalette);
     }
+}
+
+void RefreshVideo(bool recreateWindow)
+{
+    if (recreateWindow)
+    {
+        context_recreate_window();
+    }
+    else
+    {
+        drawing_engine_dispose();
+        drawing_engine_init();
+        drawing_engine_resize();
+    }
+
+    drawing_engine_set_palette(gPalette);
+    gfx_invalidate_screen();
+}
+
+void ToggleWindowedMode()
+{
+    int32_t targetMode = gConfigGeneral.fullscreen_mode == 0 ? 2 : 0;
+    context_set_fullscreen_mode(targetMode);
+    gConfigGeneral.fullscreen_mode = targetMode;
+    config_save_default();
 }

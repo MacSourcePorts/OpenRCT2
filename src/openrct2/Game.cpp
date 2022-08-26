@@ -1,5 +1,5 @@
 /*****************************************************************************
- * Copyright (c) 2014-2020 OpenRCT2 developers
+ * Copyright (c) 2014-2022 OpenRCT2 developers
  *
  * For a complete list of all authors, please refer to contributors.md
  * Interested in contributing? Visit https://github.com/OpenRCT2/OpenRCT2
@@ -27,6 +27,7 @@
 #include "core/FileScanner.h"
 #include "core/Path.hpp"
 #include "entity/EntityRegistry.h"
+#include "entity/PatrolArea.h"
 #include "entity/Peep.h"
 #include "entity/Staff.h"
 #include "interface/Colour.h"
@@ -40,7 +41,7 @@
 #include "network/network.h"
 #include "object/Object.h"
 #include "object/ObjectList.h"
-#include "platform/Platform2.h"
+#include "platform/Platform.h"
 #include "ride/Ride.h"
 #include "ride/RideRatings.h"
 #include "ride/Station.h"
@@ -85,15 +86,16 @@ bool gLoadKeepWindowsOpen = false;
 uint32_t gCurrentTicks;
 uint32_t gCurrentRealTimeTicks;
 
-rct_string_id gGameCommandErrorTitle;
-rct_string_id gGameCommandErrorText;
+#ifdef ENABLE_SCRIPTING
+static bool _mapChangedExpected;
+#endif
 
 using namespace OpenRCT2;
 
 void game_reset_speed()
 {
     gGameSpeed = 1;
-    window_invalidate_by_class(WC_TOP_TOOLBAR);
+    window_invalidate_by_class(WindowClass::TopToolbar);
 }
 
 void game_increase_game_speed()
@@ -101,7 +103,7 @@ void game_increase_game_speed()
     gGameSpeed = std::min(gConfigGeneral.debugging_tools ? 5 : 4, gGameSpeed + 1);
     if (gGameSpeed == 5)
         gGameSpeed = 8;
-    window_invalidate_by_class(WC_TOP_TOOLBAR);
+    window_invalidate_by_class(WindowClass::TopToolbar);
 }
 
 void game_reduce_game_speed()
@@ -109,7 +111,7 @@ void game_reduce_game_speed()
     gGameSpeed = std::max(1, gGameSpeed - 1);
     if (gGameSpeed == 7)
         gGameSpeed = 4;
-    window_invalidate_by_class(WC_TOP_TOOLBAR);
+    window_invalidate_by_class(WindowClass::TopToolbar);
 }
 
 /**
@@ -118,9 +120,9 @@ void game_reduce_game_speed()
  */
 void game_create_windows()
 {
-    context_open_window(WC_MAIN_WINDOW);
-    context_open_window(WC_TOP_TOOLBAR);
-    context_open_window(WC_BOTTOM_TOOLBAR);
+    context_open_window(WindowClass::MainWindow);
+    context_open_window(WindowClass::TopToolbar);
+    context_open_window(WindowClass::BottomToolbar);
     window_resize_gui(context_get_width(), context_get_height());
 }
 
@@ -298,7 +300,7 @@ void update_palette_effects()
 void pause_toggle()
 {
     gGamePaused ^= GAME_PAUSED_NORMAL;
-    window_invalidate_by_class(WC_TOP_TOOLBAR);
+    window_invalidate_by_class(WindowClass::TopToolbar);
     if (gGamePaused & GAME_PAUSED_NORMAL)
     {
         OpenRCT2::Audio::StopAll();
@@ -321,7 +323,7 @@ bool game_is_not_paused()
  */
 static void load_landscape()
 {
-    auto intent = Intent(WC_LOADSAVE);
+    auto intent = Intent(WindowClass::Loadsave);
     intent.putExtra(INTENT_EXTRA_LOADSAVE_TYPE, LOADSAVETYPE_LOAD | LOADSAVETYPE_LANDSCAPE);
     context_open_intent(&intent);
 }
@@ -359,11 +361,11 @@ void game_fix_save_vars()
     // Fix possibly invalid field values
     for (auto peep : EntityList<Guest>())
     {
-        if (peep->CurrentRideStation >= OpenRCT2::Limits::MaxStationsPerRide)
+        if (peep->CurrentRideStation.ToUnderlying() >= OpenRCT2::Limits::MaxStationsPerRide)
         {
             const auto srcStation = peep->CurrentRideStation;
             const auto rideIdx = peep->CurrentRide;
-            if (rideIdx == RIDE_ID_NULL)
+            if (rideIdx.IsNull())
             {
                 continue;
             }
@@ -371,15 +373,15 @@ void game_fix_save_vars()
             if (ride == nullptr)
             {
                 log_warning("Couldn't find ride %u, resetting ride on peep %u", rideIdx, peep->sprite_index);
-                peep->CurrentRide = RIDE_ID_NULL;
+                peep->CurrentRide = RideId::GetNull();
                 continue;
             }
             auto curName = peep->GetName();
             log_warning(
-                "Peep %u (%s) has invalid ride station = %u for ride %u.", peep->sprite_index, curName.c_str(), srcStation,
-                rideIdx);
+                "Peep %u (%s) has invalid ride station = %u for ride %u.", peep->sprite_index, curName.c_str(),
+                srcStation.ToUnderlying(), rideIdx);
             auto station = ride_get_first_valid_station_exit(ride);
-            if (station == STATION_INDEX_NULL)
+            if (station.IsNull())
             {
                 log_warning("Couldn't find station, removing peep %u", peep->sprite_index);
                 peepsToRemove.push_back(peep);
@@ -424,7 +426,7 @@ void game_fix_save_vars()
 
             // Fix the invisible border tiles.
             // At this point, we can be sure that surfaceElement is not NULL.
-            if (x == 0 || x == gMapSize - 1 || y == 0 || y == gMapSize - 1)
+            if (x == 0 || x == gMapSize.x - 1 || y == 0 || y == gMapSize.y - 1)
             {
                 surfaceElement->SetBaseZ(MINIMUM_LAND_HEIGHT_BIG);
                 surfaceElement->SetClearanceZ(MINIMUM_LAND_HEIGHT_BIG);
@@ -448,7 +450,7 @@ void game_fix_save_vars()
     // Fix gParkEntrance locations for which the tile_element no longer exists
     fix_park_entrance_locations();
 
-    staff_update_greyed_patrol_areas();
+    UpdateConsolidatedPatrolAreas();
 }
 
 void game_load_init()
@@ -466,7 +468,7 @@ void game_load_init()
     else
     {
         auto* mainWindow = window_get_main();
-        window_unfollow_sprite(mainWindow);
+        window_unfollow_sprite(*mainWindow);
     }
 
     auto windowManager = GetContext()->GetUiContext()->GetWindowManager();
@@ -501,14 +503,42 @@ void game_load_init()
 void game_load_scripts()
 {
 #ifdef ENABLE_SCRIPTING
-    GetContext()->GetScriptEngine().LoadPlugins();
+    GetContext()->GetScriptEngine().LoadTransientPlugins();
 #endif
 }
 
 void game_unload_scripts()
 {
 #ifdef ENABLE_SCRIPTING
-    GetContext()->GetScriptEngine().UnloadPlugins();
+    GetContext()->GetScriptEngine().UnloadTransientPlugins();
+#endif
+}
+
+void game_notify_map_change()
+{
+#ifdef ENABLE_SCRIPTING
+    // Ensure we don't get a two lots of change events
+    if (_mapChangedExpected)
+        return;
+
+    using namespace OpenRCT2::Scripting;
+
+    auto& scriptEngine = GetContext()->GetScriptEngine();
+    auto& hookEngine = scriptEngine.GetHookEngine();
+    hookEngine.Call(HOOK_TYPE::MAP_CHANGE, false);
+    _mapChangedExpected = true;
+#endif
+}
+
+void game_notify_map_changed()
+{
+#ifdef ENABLE_SCRIPTING
+    using namespace OpenRCT2::Scripting;
+
+    auto& scriptEngine = GetContext()->GetScriptEngine();
+    auto& hookEngine = scriptEngine.GetHookEngine();
+    hookEngine.Call(HOOK_TYPE::MAP_CHANGED, false);
+    _mapChangedExpected = false;
 #endif
 }
 
@@ -519,9 +549,9 @@ void game_unload_scripts()
  */
 void reset_all_sprite_quadrant_placements()
 {
-    for (size_t i = 0; i < MAX_ENTITIES; i++)
+    for (EntityId::UnderlyingType i = 0; i < MAX_ENTITIES; i++)
     {
-        auto* spr = GetEntity(i);
+        auto* spr = GetEntity(EntityId::FromUnderlying(i));
         if (spr != nullptr && spr->Type != EntityType::Null)
         {
             spr->MoveTo(spr->GetLocation());
@@ -533,11 +563,7 @@ void save_game()
 {
     if (!gFirstTimeSaving)
     {
-        char savePath[MAX_PATH];
-        safe_strcpy(savePath, gScenarioSavePath.c_str(), MAX_PATH);
-        path_remove_extension(savePath);
-        path_append_extension(savePath, ".park", MAX_PATH);
-
+        const auto savePath = Path::WithExtension(gScenarioSavePath, ".park");
         save_game_with_name(savePath);
     }
     else
@@ -550,17 +576,14 @@ void save_game_cmd(u8string_view name /* = {} */)
 {
     if (name.empty())
     {
-        char savePath[MAX_PATH];
-        safe_strcpy(savePath, gScenarioSavePath.c_str(), MAX_PATH);
-        path_remove_extension(savePath);
-        path_append_extension(savePath, ".park", MAX_PATH);
+        const auto savePath = Path::WithExtension(gScenarioSavePath, ".park");
 
         save_game_with_name(savePath);
     }
     else
     {
         auto env = GetContext()->GetPlatformEnvironment();
-        auto savePath = Path::Combine(env->GetDirectoryPath(DIRBASE::USER, DIRID::SAVE), u8string(name) + ".park");
+        auto savePath = Path::Combine(env->GetDirectoryPath(DIRBASE::USER, DIRID::SAVE), u8string(name) + u8".park");
         save_game_with_name(savePath);
     }
 }
@@ -576,24 +599,21 @@ void save_game_with_name(u8string_view name)
     }
 }
 
-void* create_save_game_as_intent()
+std::unique_ptr<Intent> create_save_game_as_intent()
 {
-    char name[MAX_PATH];
-    safe_strcpy(name, path_get_filename(gScenarioSavePath.c_str()), MAX_PATH);
-    path_remove_extension(name);
+    auto name = Path::GetFileNameWithoutExtension(gScenarioSavePath);
 
-    Intent* intent = new Intent(WC_LOADSAVE);
+    auto intent = std::make_unique<Intent>(WindowClass::Loadsave);
     intent->putExtra(INTENT_EXTRA_LOADSAVE_TYPE, LOADSAVETYPE_SAVE | LOADSAVETYPE_GAME);
-    intent->putExtra(INTENT_EXTRA_PATH, std::string{ name });
+    intent->putExtra(INTENT_EXTRA_PATH, name);
 
     return intent;
 }
 
 void save_game_as()
 {
-    auto* intent = static_cast<Intent*>(create_save_game_as_intent());
-    context_open_intent(intent);
-    delete intent;
+    auto intent = create_save_game_as_intent();
+    context_open_intent(intent.get());
 }
 
 static void limit_autosave_count(const size_t numberOfFilesToKeep, bool processLandscapeFolder)
@@ -610,10 +630,7 @@ static void limit_autosave_count(const size_t numberOfFilesToKeep, bool processL
         fileFilter = "autosave_*.park";
     }
 
-    utf8 filter[MAX_PATH];
-    safe_strcpy(filter, folderDirectory.c_str(), sizeof(filter));
-    safe_strcat_path(filter, "autosave", sizeof(filter));
-    safe_strcat_path(filter, fileFilter, sizeof(filter));
+    const u8string filter = Path::Combine(folderDirectory, "autosave", fileFilter);
 
     // At first, count how many autosaves there are
     {
@@ -630,17 +647,14 @@ static void limit_autosave_count(const size_t numberOfFilesToKeep, bool processL
         return;
     }
 
-    auto autosaveFiles = std::vector<std::string>(autosavesCount);
+    std::vector<u8string> autosaveFiles;
     {
         auto scanner = Path::ScanDirectory(filter, false);
         for (size_t i = 0; i < autosavesCount; i++)
         {
-            autosaveFiles[i].resize(MAX_PATH, 0);
             if (scanner->Next())
             {
-                safe_strcpy(autosaveFiles[i].data(), folderDirectory.c_str(), sizeof(utf8) * MAX_PATH);
-                safe_strcat_path(autosaveFiles[i].data(), "autosave", sizeof(utf8) * MAX_PATH);
-                safe_strcat_path(autosaveFiles[i].data(), scanner->GetPathRelative(), sizeof(utf8) * MAX_PATH);
+                autosaveFiles.emplace_back(Path::Combine(folderDirectory, "autosave", scanner->GetPathRelative()));
             }
         }
     }
@@ -650,11 +664,11 @@ static void limit_autosave_count(const size_t numberOfFilesToKeep, bool processL
     });
 
     // Calculate how many saves we need to delete.
-    numAutosavesToDelete = autosavesCount - numberOfFilesToKeep;
+    numAutosavesToDelete = autosaveFiles.size() - numberOfFilesToKeep;
 
     for (size_t i = 0; numAutosavesToDelete > 0; i++, numAutosavesToDelete--)
     {
-        if (!File::Delete(autosaveFiles[i].data()))
+        if (!File::Delete(autosaveFiles[i]))
         {
             log_warning("Failed to delete autosave file: %s", autosaveFiles[i].data());
         }
@@ -686,11 +700,11 @@ void game_autosave()
     limit_autosave_count(autosavesToKeep - 1, (gScreenFlags & SCREEN_FLAGS_EDITOR));
 
     auto env = GetContext()->GetPlatformEnvironment();
-    auto autosaveDir = Path::Combine(env->GetDirectoryPath(DIRBASE::USER, subDirectory), "autosave");
-    platform_ensure_directory_exists(autosaveDir.c_str());
+    auto autosaveDir = Path::Combine(env->GetDirectoryPath(DIRBASE::USER, subDirectory), u8"autosave");
+    Platform::EnsureDirectoryExists(autosaveDir.c_str());
 
     auto path = Path::Combine(autosaveDir, timeName);
-    auto backupFileName = u8string("autosave") + fileExtension + ".bak";
+    auto backupFileName = u8string(u8"autosave") + fileExtension + u8".bak";
     auto backupPath = Path::Combine(autosaveDir, backupFileName);
 
     if (File::Exists(path))
@@ -706,10 +720,12 @@ static void game_load_or_quit_no_save_prompt_callback(int32_t result, const utf8
 {
     if (result == MODAL_RESULT_OK)
     {
+        game_notify_map_change();
         game_unload_scripts();
-        window_close_by_class(WC_EDITOR_OBJECT_SELECTION);
+        window_close_by_class(WindowClass::EditorObjectSelection);
         context_load_park_from_file(path);
         game_load_scripts();
+        game_notify_map_changed();
     }
 }
 
@@ -732,7 +748,7 @@ void game_load_or_quit_no_save_prompt()
             }
             else
             {
-                auto intent = Intent(WC_LOADSAVE);
+                auto intent = Intent(WindowClass::Loadsave);
                 intent.putExtra(INTENT_EXTRA_LOADSAVE_TYPE, LOADSAVETYPE_LOAD | LOADSAVETYPE_GAME);
                 intent.putExtra(INTENT_EXTRA_CALLBACK, reinterpret_cast<void*>(game_load_or_quit_no_save_prompt_callback));
                 context_open_intent(&intent);
@@ -750,6 +766,7 @@ void game_load_or_quit_no_save_prompt()
             }
             gGameSpeed = 1;
             gFirstTimeSaving = true;
+            game_notify_map_change();
             game_unload_scripts();
             title_load();
             break;
@@ -764,7 +781,7 @@ void game_load_or_quit_no_save_prompt()
 void start_silent_record()
 {
     std::string name = Path::Combine(
-        OpenRCT2::GetContext()->GetPlatformEnvironment()->GetDirectoryPath(OpenRCT2::DIRBASE::USER), "debug_replay.parkrep");
+        OpenRCT2::GetContext()->GetPlatformEnvironment()->GetDirectoryPath(OpenRCT2::DIRBASE::USER), u8"debug_replay.parkrep");
     auto* replayManager = OpenRCT2::GetContext()->GetReplayManager();
     if (replayManager->StartRecording(name, OpenRCT2::k_MaxReplayTicks, OpenRCT2::IReplayManager::RecordType::SILENT))
     {
@@ -801,4 +818,18 @@ bool stop_silent_record()
     }
 
     return false;
+}
+
+void PrepareMapForSave()
+{
+    viewport_set_saved_view();
+
+#ifdef ENABLE_SCRIPTING
+    auto& scriptEngine = GetContext()->GetScriptEngine();
+    auto& hookEngine = scriptEngine.GetHookEngine();
+    if (hookEngine.HasSubscriptions(OpenRCT2::Scripting::HOOK_TYPE::MAP_SAVE))
+    {
+        hookEngine.Call(OpenRCT2::Scripting::HOOK_TYPE::MAP_SAVE, false);
+    }
+#endif
 }

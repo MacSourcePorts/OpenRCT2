@@ -25,7 +25,7 @@
 #include "../localisation/Language.h"
 #include "../localisation/Localisation.h"
 #include "../localisation/LocalisationService.h"
-#include "../platform/Platform2.h"
+#include "../platform/Platform.h"
 #include "../rct12/RCT12.h"
 #include "../rct12/SawyerChunkReader.h"
 #include "Scenario.h"
@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <vector>
 
 using namespace OpenRCT2;
@@ -141,19 +142,19 @@ public:
     }
 
 protected:
-    std::tuple<bool, scenario_index_entry> Create(int32_t, const std::string& path) const override
+    std::optional<scenario_index_entry> Create(int32_t, const std::string& path) const override
     {
         scenario_index_entry entry;
         auto timestamp = File::GetLastModified(path);
         if (GetScenarioInfo(path, timestamp, &entry))
         {
-            return std::make_tuple(true, entry);
+            return entry;
         }
 
-        return std::make_tuple(true, scenario_index_entry());
+        return std::nullopt;
     }
 
-    void Serialise(DataSerialiser& ds, scenario_index_entry& item) const override
+    void Serialise(DataSerialiser& ds, const scenario_index_entry& item) const override
     {
         ds << item.path;
         ds << item.timestamp;
@@ -176,7 +177,7 @@ private:
     {
         if (String::Equals(Path::GetExtension(path), ".sea", true))
         {
-            auto data = DecryptSea(u8path(path));
+            auto data = DecryptSea(fs::u8path(path));
             auto ms = std::make_unique<MemoryStream>();
             // Need to copy the data into MemoryStream as the overload will borrow instead of copy.
             ms->Write(data.data(), data.size());
@@ -383,7 +384,7 @@ public:
         return result;
     }
 
-    const scenario_index_entry* GetByFilename(const utf8* filename) const override
+    const scenario_index_entry* GetByFilename(u8string_view filename) const override
     {
         for (const auto& scenario : _scenarios)
         {
@@ -464,14 +465,14 @@ public:
                 if (highscore == nullptr)
                 {
                     highscore = InsertHighscore();
-                    highscore->timestamp = platform_get_datetime_now_utc();
+                    highscore->timestamp = Platform::GetDatetimeNowUTC();
                     scenario->highscore = highscore;
                 }
                 else
                 {
                     if (!String::IsNullOrEmpty(highscore->name))
                     {
-                        highscore->timestamp = platform_get_datetime_now_utc();
+                        highscore->timestamp = Platform::GetDatetimeNowUTC();
                     }
                     SafeFree(highscore->fileName);
                     SafeFree(highscore->name);
@@ -505,21 +506,16 @@ private:
      */
     void ImportMegaPark()
     {
-        auto mpdatPath = _env->GetFilePath(PATHID::MP_DAT);
-        auto scenarioDirectory = _env->GetDirectoryPath(DIRBASE::USER, DIRID::SCENARIO);
-        auto expectedSc21Path = Path::Combine(scenarioDirectory, "sc21.sc4");
-        auto sc21Path = Path::ResolveCasing(expectedSc21Path);
-
-        // If the user has a Steam installation.
-        if (!File::Exists(mpdatPath))
+        auto mpdatPath = _env->FindFile(DIRBASE::RCT1, DIRID::DATA, "mp.dat");
+        if (File::Exists(mpdatPath))
         {
-            mpdatPath = Path::ResolveCasing(
-                Path::Combine(_env->GetDirectoryPath(DIRBASE::RCT1), "RCTdeluxe_install", "Data", "mp.dat"));
-        }
-
-        if (File::Exists(mpdatPath) && !File::Exists(sc21Path))
-        {
-            ConvertMegaPark(mpdatPath, expectedSc21Path);
+            auto scenarioDirectory = _env->GetDirectoryPath(DIRBASE::USER, DIRID::SCENARIO);
+            auto expectedSc21Path = Path::Combine(scenarioDirectory, "sc21.sc4");
+            auto sc21Path = Path::ResolveCasing(expectedSc21Path);
+            if (!File::Exists(sc21Path))
+            {
+                ConvertMegaPark(mpdatPath, expectedSc21Path);
+            }
         }
     }
 
@@ -531,7 +527,7 @@ private:
     void ConvertMegaPark(const std::string& srcPath, const std::string& dstPath)
     {
         auto directory = Path::GetDirectory(dstPath);
-        platform_ensure_directory_exists(directory.c_str());
+        Platform::EnsureDirectoryExists(directory.c_str());
 
         auto mpdat = File::ReadAllBytes(srcPath);
 

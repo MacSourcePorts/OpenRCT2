@@ -15,7 +15,7 @@
 #include "../interface/Screenshot.h"
 #include "../localisation/StringIds.h"
 #include "../paint/Painter.h"
-#include "../platform/Platform2.h"
+#include "../platform/Platform.h"
 #include "../ui/UiContext.h"
 #include "../world/Location.hpp"
 #include "IDrawingContext.h"
@@ -28,7 +28,7 @@ using namespace OpenRCT2::Drawing;
 using namespace OpenRCT2::Paint;
 using namespace OpenRCT2::Ui;
 
-rct_string_id DrawingEngineStringIds[] = {
+StringId DrawingEngineStringIds[] = {
     STR_DRAWING_ENGINE_SOFTWARE,
     STR_DRAWING_ENGINE_SOFTWARE_WITH_HARDWARE_DISPLAY,
     STR_DRAWING_ENGINE_OPENGL,

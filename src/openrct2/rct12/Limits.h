@@ -12,7 +12,7 @@
 
 namespace RCT12::Limits
 {
-    constexpr const uint8_t MaxRideObject = 128;
+    constexpr const uint8_t MaxRideObjects = 128;
 
     constexpr const uint8_t MaxRidesInPark = 255;
     constexpr const uint8_t MaxAwards = 4;
@@ -44,4 +44,6 @@ namespace RCT12::Limits
     constexpr uint16_t const MaxHelices = 31;
     constexpr const uint8_t MaxElementHeight = 255;
     constexpr const uint8_t CustomerHistorySize = 10;
+
+    constexpr const uint8_t MaxWaitingTime = 250;
 } // namespace RCT12::Limits

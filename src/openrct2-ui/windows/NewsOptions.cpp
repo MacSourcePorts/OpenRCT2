@@ -14,7 +14,7 @@
 #include <openrct2/drawing/Drawing.h>
 #include <openrct2/sprites.h>
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_NOTIFICATION_SETTINGS;
+static constexpr const StringId WINDOW_TITLE = STR_NOTIFICATION_SETTINGS;
 static constexpr const int32_t WH = 300;
 static constexpr const int32_t WW = 400;
 
@@ -30,7 +30,7 @@ enum
 struct NotificationDef
 {
     uint8_t category;
-    rct_string_id caption;
+    StringId caption;
     size_t config_offset;
 };
 
@@ -68,9 +68,6 @@ enum WindowNewsOptionsWidgetIdx
     WIDX_CHECKBOX_0
 };
 
-constexpr int MAIN_NEWS_OPTIONS_ENABLED_WIDGETS =
-    (1ULL << WIDX_CLOSE) | (1ULL << WIDX_TAB_PARK) | (1ULL << WIDX_TAB_RIDE) | (1ULL << WIDX_TAB_GUEST);
-
 static rct_widget WindowNewsOptionsWidgets[] = {
     WINDOW_SHIM(WINDOW_TITLE, WW, WH),
     MakeWidget({ 0, 43}, {400, 257}, WindowWidgetType::Resize,   WindowColour::Secondary), // Tab content panel
@@ -96,14 +93,13 @@ public:
     void OnOpen() override
     {
         widgets = WindowNewsOptionsWidgets;
-        enabled_widgets = MAIN_NEWS_OPTIONS_ENABLED_WIDGETS;
         InitScrollWidgets();
         colours[0] = COLOUR_GREY;
         colours[1] = COLOUR_LIGHT_BLUE;
         colours[2] = COLOUR_LIGHT_BLUE;
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -169,8 +165,6 @@ public:
             if (ndef->category != page)
                 continue;
 
-            enabled_widgets |= (1ULL << checkboxWidgetIndex);
-
             checkboxWidget->type = WindowWidgetType::Checkbox;
             checkboxWidget->left = baseCheckBox.left;
             checkboxWidget->right = baseCheckBox.right;
@@ -189,8 +183,6 @@ public:
         // Remove unused checkboxes
         while (checkboxWidget->type != WindowWidgetType::Last)
         {
-            enabled_widgets &= ~(1ULL << checkboxWidgetIndex);
-
             checkboxWidget->type = WindowWidgetType::Empty;
             checkboxWidgetIndex++;
             checkboxWidget++;
@@ -235,9 +227,9 @@ private:
 
     void DrawTabImage(rct_drawpixelinfo* dpi, int32_t p, int32_t spriteIndex)
     {
-        rct_widgetindex widgetIndex = WIDX_FIRST_TAB + p;
+        WidgetIndex widgetIndex = WIDX_FIRST_TAB + p;
 
-        if (!(disabled_widgets & (1LL << widgetIndex)))
+        if (!WidgetIsDisabled(*this, widgetIndex))
         {
             if (page == p)
             {
@@ -281,5 +273,5 @@ private:
 
 rct_window* WindowNewsOptionsOpen()
 {
-    return WindowFocusOrCreate<NewsOptionsWindow>(WC_NOTIFICATION_OPTIONS, WW, WH, WF_CENTRE_SCREEN);
+    return WindowFocusOrCreate<NewsOptionsWindow>(WindowClass::NotificationOptions, WW, WH, WF_CENTRE_SCREEN);
 }

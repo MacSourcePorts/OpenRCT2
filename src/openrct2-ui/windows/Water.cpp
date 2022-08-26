@@ -17,7 +17,7 @@
 #include <openrct2/localisation/Localisation.h>
 #include <openrct2/world/Park.h>
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_WATER;
+static constexpr const StringId WINDOW_TITLE = STR_WATER;
 static constexpr const int32_t WH = 77;
 static constexpr const int32_t WW = 76;
 
@@ -46,10 +46,9 @@ public:
     void OnOpen() override
     {
         widgets = window_water_widgets;
-        enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_DECREMENT) | (1ULL << WIDX_INCREMENT) | (1ULL << WIDX_PREVIEW);
         hold_down_widgets = (1ULL << WIDX_INCREMENT) | (1ULL << WIDX_DECREMENT);
-        WindowInitScrollWidgets(this);
-        window_push_others_below(this);
+        WindowInitScrollWidgets(*this);
+        window_push_others_below(*this);
 
         gLandToolSize = 1;
         gWaterToolRaiseCost = MONEY64_UNDEFINED;
@@ -65,7 +64,7 @@ public:
         }
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -78,7 +77,7 @@ public:
         }
     }
 
-    void OnMouseDown(rct_widgetindex widgetIndex) override
+    void OnMouseDown(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -108,7 +107,7 @@ public:
         }
     }
 
-    void OnTextInput(rct_widgetindex widgetIndex, std::string_view text) override
+    void OnTextInput(WidgetIndex widgetIndex, std::string_view text) override
     {
         int32_t size;
         char* end;
@@ -118,7 +117,8 @@ public:
             return;
         }
 
-        size = strtol(std::string(text).c_str(), &end, 10);
+        std::string textStr = std::string(text);
+        size = strtol(textStr.c_str(), &end, 10);
         if (*end == '\0')
         {
             size = std::max(MINIMUM_TOOL_SIZE, size);
@@ -187,5 +187,5 @@ private:
 
 rct_window* WindowWaterOpen()
 {
-    return WindowFocusOrCreate<WaterWindow>(WC_WATER, ScreenCoordsXY(context_get_width() - WW, 29), WW, WH, 0);
+    return WindowFocusOrCreate<WaterWindow>(WindowClass::Water, ScreenCoordsXY(context_get_width() - WW, 29), WW, WH, 0);
 }

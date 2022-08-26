@@ -31,7 +31,7 @@
 
 using namespace OpenRCT2;
 
-RideDemolishAction::RideDemolishAction(ride_id_t rideIndex, uint8_t modifyType)
+RideDemolishAction::RideDemolishAction(RideId rideIndex, uint8_t modifyType)
     : _rideIndex(rideIndex)
     , _modifyType(modifyType)
 {
@@ -60,7 +60,7 @@ GameActions::Result RideDemolishAction::Query() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid game command for ride %u", uint32_t(_rideIndex));
+        log_warning("Invalid game command for ride %u", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_CANT_DEMOLISH_RIDE, STR_NONE);
     }
 
@@ -104,7 +104,7 @@ GameActions::Result RideDemolishAction::Execute() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid game command for ride %u", uint32_t(_rideIndex));
+        log_warning("Invalid game command for ride %u", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_CANT_DEMOLISH_RIDE, STR_NONE);
     }
 
@@ -131,7 +131,7 @@ GameActions::Result RideDemolishAction::DemolishRide(Ride* ride) const
     ride_clear_leftover_entrances(ride);
 
     const auto rideId = ride->id;
-    News::DisableNewsItems(News::ItemType::Ride, EnumValue(rideId));
+    News::DisableNewsItems(News::ItemType::Ride, rideId.ToUnderlying());
 
     UnlinkAllBannersForRide(ride->id);
 
@@ -157,10 +157,10 @@ GameActions::Result RideDemolishAction::DemolishRide(Ride* ride) const
     gParkValue = GetContext()->GetGameState()->GetPark().CalculateParkValue();
 
     // Close windows related to the demolished ride
-    window_close_by_number(WC_RIDE_CONSTRUCTION, EnumValue(rideId));
-    window_close_by_number(WC_RIDE, EnumValue(rideId));
-    window_close_by_number(WC_DEMOLISH_RIDE_PROMPT, EnumValue(rideId));
-    window_close_by_class(WC_NEW_CAMPAIGN);
+    window_close_by_number(WindowClass::RideConstruction, rideId.ToUnderlying());
+    window_close_by_number(WindowClass::Ride, rideId.ToUnderlying());
+    window_close_by_number(WindowClass::DemolishRidePrompt, rideId.ToUnderlying());
+    window_close_by_class(WindowClass::NewCampaign);
 
     // Refresh windows that display the ride name
     auto windowManager = OpenRCT2::GetContext()->GetUiContext()->GetWindowManager();
@@ -195,42 +195,49 @@ money32 RideDemolishAction::DemolishTracks() const
     uint8_t oldpaused = gGamePaused;
     gGamePaused = 0;
 
-    for (TileCoordsXY tilePos = {}; tilePos.x < gMapSize; ++tilePos.x)
+    for (TileCoordsXY tilePos = {}; tilePos.x < gMapSize.x; ++tilePos.x)
     {
-        for (tilePos.y = 0; tilePos.y < gMapSize; ++tilePos.y)
+        for (tilePos.y = 0; tilePos.y < gMapSize.y; ++tilePos.y)
         {
             const auto tileCoords = tilePos.ToCoordsXY();
-            // Keep retrying a tile coordinate until there are no more items to remove
-            bool itemRemoved = false;
-            do
+            // Loop over all elements of the tile until there are no more items to remove
+            int offset = -1;
+            bool lastForTileReached = false;
+            while (!lastForTileReached)
             {
-                itemRemoved = false;
-                for (auto* trackElement : TileElementsView<TrackElement>(tileCoords))
+                offset++;
+                auto* tileElement = map_get_first_element_at(tileCoords) + offset;
+                if (tileElement == nullptr)
+                    break;
+
+                lastForTileReached = tileElement->IsLastForTile();
+                if (tileElement->GetType() != TileElementType::Track)
+                    continue;
+
+                auto* trackElement = tileElement->AsTrack();
+                if (trackElement->GetRideIndex() != _rideIndex)
+                    continue;
+
+                const auto location = CoordsXYZD(tileCoords, trackElement->GetBaseZ(), trackElement->GetDirection());
+                const auto type = trackElement->GetTrackType();
+
+                if (type != TrackElemType::Maze)
                 {
-                    if (trackElement->GetRideIndex() != _rideIndex)
-                        continue;
+                    auto trackRemoveAction = TrackRemoveAction(type, trackElement->GetSequenceIndex(), location);
+                    trackRemoveAction.SetFlags(GAME_COMMAND_FLAG_NO_SPEND);
 
-                    const auto location = CoordsXYZD(tileCoords, trackElement->GetBaseZ(), trackElement->GetDirection());
-                    const auto type = trackElement->GetTrackType();
-
-                    if (type != TrackElemType::Maze)
+                    auto removRes = GameActions::ExecuteNested(&trackRemoveAction);
+                    if (removRes.Error != GameActions::Status::Ok)
                     {
-                        auto trackRemoveAction = TrackRemoveAction(type, trackElement->GetSequenceIndex(), location);
-                        trackRemoveAction.SetFlags(GAME_COMMAND_FLAG_NO_SPEND);
-
-                        auto removRes = GameActions::ExecuteNested(&trackRemoveAction);
-                        itemRemoved = true;
-                        if (removRes.Error != GameActions::Status::Ok)
-                        {
-                            tile_element_remove(trackElement->as<TileElement>());
-                        }
-                        else
-                        {
-                            refundPrice += removRes.Cost;
-                        }
-                        continue;
+                        tile_element_remove(tileElement);
                     }
-
+                    else
+                    {
+                        refundPrice += removRes.Cost;
+                    }
+                }
+                else
+                {
                     static constexpr const CoordsXY DirOffsets[] = {
                         { 0, 0 },
                         { 0, 16 },
@@ -244,13 +251,13 @@ money32 RideDemolishAction::DemolishTracks() const
                         if (removePrice != MONEY32_UNDEFINED)
                         {
                             refundPrice += removePrice;
-                            itemRemoved = true;
                         }
-                        else
-                            break;
                     }
                 }
-            } while (itemRemoved);
+
+                // Now we have removed an element, decrement the offset, or we may skip consecutive track elements
+                offset--;
+            }
         }
     }
 
@@ -277,7 +284,7 @@ GameActions::Result RideDemolishAction::RefurbishRide(Ride* ride) const
         res.Position = { location, tile_element_height(location) };
     }
 
-    window_close_by_number(WC_DEMOLISH_RIDE_PROMPT, EnumValue(_rideIndex));
+    window_close_by_number(WindowClass::DemolishRidePrompt, _rideIndex.ToUnderlying());
 
     return res;
 }

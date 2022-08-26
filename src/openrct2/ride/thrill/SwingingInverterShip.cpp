@@ -68,8 +68,6 @@ static constexpr const uint32_t SwingingInverterShipFrameSprites[] = {
 static void PaintSwingingInverterShipStructure(
     paint_session& session, const Ride& ride, uint8_t direction, int8_t axisOffset, uint16_t height)
 {
-    const TileElement* savedTileElement = static_cast<const TileElement*>(session.CurrentlyDrawnItem);
-
     rct_ride_entry* rideEntry = get_ride_entry(ride.subtype);
     if (rideEntry == nullptr)
         return;
@@ -86,17 +84,17 @@ static void PaintSwingingInverterShipStructure(
         if (vehicle != nullptr)
         {
             session.InteractionType = ViewportInteractionItem::Entity;
-            session.CurrentlyDrawnItem = vehicle;
+            session.CurrentlyDrawnEntity = vehicle;
         }
     }
 
-    ImageIndex vehicleImageIndex = rideEntry->vehicles[0].base_image_id + SwingingInverterShipBaseSpriteOffset[direction];
+    ImageIndex vehicleImageIndex = rideEntry->Cars[0].base_image_id + SwingingInverterShipBaseSpriteOffset[direction];
     if (vehicle != nullptr)
     {
         int32_t rotation = static_cast<int8_t>(vehicle->Pitch);
         if (rotation != 0)
         {
-            vehicleImageIndex = rideEntry->vehicles[0].base_image_id + SwingingInverterShipAnimatingBaseSpriteOffset[direction];
+            vehicleImageIndex = rideEntry->Cars[0].base_image_id + SwingingInverterShipAnimatingBaseSpriteOffset[direction];
             if (direction & 2)
             {
                 rotation = -rotation;
@@ -130,7 +128,7 @@ static void PaintSwingingInverterShipStructure(
         PaintAddImageAsChild(session, vehicleImageId, offset, bbLength, bbOffset);
     }
 
-    session.CurrentlyDrawnItem = savedTileElement;
+    session.CurrentlyDrawnEntity = nullptr;
     session.InteractionType = ViewportInteractionItem::Ride;
 }
 
@@ -173,11 +171,11 @@ static void PaintSwingingInverterShip(
                     break;
                 case 2:
                     imageId = SPR_STATION_PLATFORM_SW_NE | session.TrackColours[SCHEME_TRACK];
-                    PaintAddImageAsChild(session, imageId, 0, 0, 32, 8, 1, height + 9, -2, 0, height);
+                    PaintAddImageAsChild(session, imageId, { 0, 0, height + 9 }, { 32, 8, 1 }, { -2, 0, height });
                     break;
                 case 3:
                     imageId = SPR_STATION_PLATFORM_NW_SE | session.TrackColours[SCHEME_TRACK];
-                    PaintAddImageAsChild(session, imageId, 0, 0, 8, 32, 1, height + 9, 0, -2, height);
+                    PaintAddImageAsChild(session, imageId, { 0, 0, height + 9 }, { 8, 32, 1 }, { 0, -2, height });
                     break;
             }
         }

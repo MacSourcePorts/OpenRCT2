@@ -65,9 +65,9 @@ struct ResearchItem
     void SetNull();
     bool Exists() const;
     bool IsAlwaysResearched() const;
-    rct_string_id GetName() const;
-    rct_string_id GetCategoryInventionString() const;
-    rct_string_id GetCategoryName() const;
+    StringId GetName() const;
+    StringId GetCategoryInventionString() const;
+    StringId GetCategoryName() const;
 
     ResearchItem() = default;
     constexpr ResearchItem(uint32_t _rawValue, ResearchCategory _category, uint8_t _flags)
@@ -133,16 +133,16 @@ void research_finish_item(ResearchItem* researchItem);
 void research_insert(ResearchItem&& item, bool researched);
 void ResearchRemove(const ResearchItem& researchItem);
 
-bool research_insert_ride_entry(uint8_t rideType, ObjectEntryIndex entryIndex, ResearchCategory category, bool researched);
+bool research_insert_ride_entry(ride_type_t rideType, ObjectEntryIndex entryIndex, ResearchCategory category, bool researched);
 void research_insert_ride_entry(ObjectEntryIndex entryIndex, bool researched);
 bool research_insert_scenery_group_entry(ObjectEntryIndex entryIndex, bool researched);
 
 void ride_type_set_invented(uint32_t rideType);
-void ride_entry_set_invented(int32_t rideEntryIndex);
+void ride_entry_set_invented(ObjectEntryIndex rideEntryIndex);
 void scenery_set_invented(const ScenerySelection& sceneryItem);
 void scenery_set_not_invented(const ScenerySelection& sceneryItem);
 bool ride_type_is_invented(uint32_t rideType);
-bool ride_entry_is_invented(int32_t rideEntryIndex);
+bool ride_entry_is_invented(ObjectEntryIndex rideEntryIndex);
 bool scenery_group_is_invented(int32_t sgIndex);
 void scenery_group_set_invented(int32_t sgIndex);
 bool scenery_is_invented(const ScenerySelection& sceneryItem);

@@ -21,8 +21,7 @@
 #include "../ui/WindowManager.h"
 #include "../world/Park.h"
 
-RideSetAppearanceAction::RideSetAppearanceAction(
-    ride_id_t rideIndex, RideSetAppearanceType type, uint16_t value, uint32_t index)
+RideSetAppearanceAction::RideSetAppearanceAction(RideId rideIndex, RideSetAppearanceType type, uint16_t value, uint32_t index)
     : _rideIndex(rideIndex)
     , _type(type)
     , _value(value)
@@ -54,7 +53,7 @@ GameActions::Result RideSetAppearanceAction::Query() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid game command, ride_id = %u", uint32_t(_rideIndex));
+        log_warning("Invalid game command, ride_id = %u", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
     }
 
@@ -80,6 +79,7 @@ GameActions::Result RideSetAppearanceAction::Query() const
             break;
         case RideSetAppearanceType::VehicleColourScheme:
         case RideSetAppearanceType::EntranceStyle:
+        case RideSetAppearanceType::SellingItemColourIsRandom:
             break;
         default:
             log_warning("Invalid game command, type %d not recognised", _type);
@@ -94,7 +94,7 @@ GameActions::Result RideSetAppearanceAction::Execute() const
     auto ride = get_ride(_rideIndex);
     if (ride == nullptr)
     {
-        log_warning("Invalid game command, ride_id = %u", uint32_t(_rideIndex));
+        log_warning("Invalid game command, ride_id = %u", _rideIndex.ToUnderlying());
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
     }
 
@@ -121,11 +121,12 @@ GameActions::Result RideSetAppearanceAction::Execute() const
             ride_update_vehicle_colours(ride);
             break;
         case RideSetAppearanceType::VehicleColourTernary:
-            ride->vehicle_colours[_index].Ternary = _value;
+            ride->vehicle_colours[_index].Tertiary = _value;
             ride_update_vehicle_colours(ride);
             break;
         case RideSetAppearanceType::VehicleColourScheme:
-            ride->colour_scheme_type &= ~(RIDE_COLOUR_SCHEME_DIFFERENT_PER_TRAIN | RIDE_COLOUR_SCHEME_DIFFERENT_PER_CAR);
+            ride->colour_scheme_type &= ~(
+                RIDE_COLOUR_SCHEME_MODE_DIFFERENT_PER_TRAIN | RIDE_COLOUR_SCHEME_MODE_DIFFERENT_PER_CAR);
             ride->colour_scheme_type |= _value;
             for (uint32_t i = 1; i < std::size(ride->vehicle_colours); i++)
             {
@@ -137,8 +138,11 @@ GameActions::Result RideSetAppearanceAction::Execute() const
             ride->entrance_style = _value;
             gfx_invalidate_screen();
             break;
+        case RideSetAppearanceType::SellingItemColourIsRandom:
+            ride->SetLifecycleFlag(RIDE_LIFECYCLE_RANDOM_SHOP_COLOURS, static_cast<bool>(_value));
+            break;
     }
-    window_invalidate_by_number(WC_RIDE, EnumValue(_rideIndex));
+    window_invalidate_by_number(WindowClass::Ride, _rideIndex.ToUnderlying());
 
     auto res = GameActions::Result();
     if (!ride->overall_view.IsNull())

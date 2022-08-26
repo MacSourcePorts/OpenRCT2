@@ -43,7 +43,7 @@ struct RideRatingUpdateState
 {
     CoordsXYZ Proximity;
     CoordsXYZ ProximityStart;
-    ride_id_t CurrentRide;
+    RideId CurrentRide;
     uint8_t State;
     track_type_t ProximityTrackType;
     uint8_t ProximityBaseHeight;
@@ -60,7 +60,7 @@ void ride_ratings_update_ride(const Ride& ride);
 void ride_ratings_update_all();
 
 using ride_ratings_calculation = void (*)(Ride* ride, RideRatingUpdateState& state);
-ride_ratings_calculation ride_ratings_get_calculate_func(uint8_t rideType);
+ride_ratings_calculation ride_ratings_get_calculate_func(ride_type_t rideType);
 
 void ride_ratings_calculate_spiral_roller_coaster(Ride* ride, RideRatingUpdateState& state);
 void ride_ratings_calculate_stand_up_roller_coaster(Ride* ride, RideRatingUpdateState& state);
@@ -142,4 +142,10 @@ void ride_ratings_calculate_mine_ride(Ride* ride, RideRatingUpdateState& state);
 void ride_ratings_calculate_lim_launched_roller_coaster(Ride* ride, RideRatingUpdateState& state);
 void ride_ratings_calculate_hybrid_coaster(Ride* ride, RideRatingUpdateState& state);
 void ride_ratings_calculate_single_rail_roller_coaster(Ride* ride, RideRatingUpdateState& state);
+void ride_ratings_calculate_alpine_coaster(Ride* ride, RideRatingUpdateState& state);
 void ride_ratings_calculate_drink_stall(Ride* ride, RideRatingUpdateState& state);
+
+// Special Track Element Adjustment functions for RTDs
+void SpecialTrackElementRatingsAjustment_Default(const Ride* ride, int32_t& excitement, int32_t& intensity, int32_t& nausea);
+void SpecialTrackElementRatingsAjustment_GhostTrain(const Ride* ride, int32_t& excitement, int32_t& intensity, int32_t& nausea);
+void SpecialTrackElementRatingsAjustment_LogFlume(const Ride* ride, int32_t& excitement, int32_t& intensity, int32_t& nausea);

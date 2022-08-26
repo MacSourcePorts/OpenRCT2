@@ -374,7 +374,18 @@ void PaintLargeScenery(paint_session& session, uint8_t direction, uint16_t heigh
     }
     else
     {
-        imageTemplate = ImageId(0, tileElement.GetPrimaryColour(), tileElement.GetSecondaryColour());
+        if (sceneryEntry->flags & LARGE_SCENERY_FLAG_HAS_PRIMARY_COLOUR)
+        {
+            imageTemplate = imageTemplate.WithPrimary(tileElement.GetPrimaryColour());
+        }
+        if (sceneryEntry->flags & LARGE_SCENERY_FLAG_HAS_SECONDARY_COLOUR)
+        {
+            imageTemplate = imageTemplate.WithSecondary(tileElement.GetSecondaryColour());
+        }
+        if (sceneryEntry->flags & LARGE_SCENERY_FLAG_HAS_TERTIARY_COLOUR)
+        {
+            imageTemplate = imageTemplate.WithTertiary(tileElement.GetTertiaryColour());
+        }
     }
 
     auto boxlengthZ = std::min<uint8_t>(tile->z_clearance, 128) - 3;
@@ -407,5 +418,6 @@ void PaintLargeScenery(paint_session& session, uint8_t direction, uint16_t heigh
             }
         }
     }
-    PaintLargeScenerySupports(session, direction, height, tileElement, isGhost ? imageTemplate : ImageId(), *tile);
+    PaintLargeScenerySupports(
+        session, direction, height, tileElement, isGhost ? imageTemplate : ImageId(0, COLOUR_BLACK), *tile);
 }

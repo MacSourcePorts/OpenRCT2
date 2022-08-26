@@ -27,7 +27,7 @@ static void PaintEnterpriseRiders(
     if (imageOffset >= 12)
         return;
 
-    auto baseImageIndex = rideEntry.vehicles[0].base_image_id;
+    auto baseImageIndex = rideEntry.Cars[0].base_image_id;
     for (int32_t i = 0; i < 15; i++)
     {
         if (vehicle.num_peeps <= i)
@@ -44,7 +44,6 @@ static void PaintEnterpriseRiders(
 static void PaintEnterpriseStructure(
     paint_session& session, const Ride& ride, int8_t xOffset, int8_t yOffset, uint16_t height, const TrackElement& trackElement)
 {
-    const TileElement* savedTileElement = static_cast<const TileElement*>(session.CurrentlyDrawnItem);
     const auto* rideEntry = get_ride_entry(ride.subtype);
     if (rideEntry == nullptr)
         return;
@@ -56,7 +55,7 @@ static void PaintEnterpriseStructure(
         if (vehicle != nullptr)
         {
             session.InteractionType = ViewportInteractionItem::Entity;
-            session.CurrentlyDrawnItem = vehicle;
+            session.CurrentlyDrawnEntity = vehicle;
         }
     }
 
@@ -76,7 +75,7 @@ static void PaintEnterpriseStructure(
     {
         imageTemplate = ImageId::FromUInt32(imageFlags);
     }
-    auto imageId = imageTemplate.WithIndex(rideEntry->vehicles[0].base_image_id + imageOffset);
+    auto imageId = imageTemplate.WithIndex(rideEntry->Cars[0].base_image_id + imageOffset);
     PaintAddImageAsParent(session, imageId, offset, bbLength, bbOffset);
 
     if (vehicle != nullptr)
@@ -84,7 +83,7 @@ static void PaintEnterpriseStructure(
         PaintEnterpriseRiders(session, *rideEntry, *vehicle, imageOffset, offset, bbLength, bbOffset);
     }
 
-    session.CurrentlyDrawnItem = savedTileElement;
+    session.CurrentlyDrawnEntity = nullptr;
     session.InteractionType = ViewportInteractionItem::Ride;
 }
 

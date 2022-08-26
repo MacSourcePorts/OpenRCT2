@@ -22,6 +22,7 @@
 #include <openrct2/drawing/Drawing.h>
 #include <openrct2/entity/EntityList.h>
 #include <openrct2/entity/EntityRegistry.h>
+#include <openrct2/entity/PatrolArea.h>
 #include <openrct2/entity/Staff.h>
 #include <openrct2/localisation/Formatter.h>
 #include <openrct2/localisation/Localisation.h>
@@ -59,7 +60,7 @@ enum WindowStaffListWidgetIdx
     WIDX_STAFF_LIST_MAP,
 };
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_STAFF;
+static constexpr const StringId WINDOW_TITLE = STR_STAFF;
 static constexpr const int32_t WW = 320;
 static constexpr const int32_t WH = 270;
 constexpr int32_t MAX_WW = 500;
@@ -88,12 +89,12 @@ class StaffListWindow final : public Window
 private:
     struct StaffNamingConvention
     {
-        rct_string_id Plural;
-        rct_string_id Singular;
-        rct_string_id ActionHire;
+        StringId Plural;
+        StringId Singular;
+        StringId ActionHire;
     };
 
-    std::vector<uint16_t> _staffList;
+    std::vector<EntityId> _staffList;
     bool _quickFireMode{};
     std::optional<size_t> _highlightedIndex{};
     int32_t _selectedTab{};
@@ -103,12 +104,7 @@ public:
     void OnOpen() override
     {
         widgets = window_staff_list_widgets;
-        enabled_widgets = (1ULL << WIDX_STAFF_LIST_CLOSE) | (1ULL << WIDX_STAFF_LIST_HANDYMEN_TAB)
-            | (1ULL << WIDX_STAFF_LIST_MECHANICS_TAB) | (1ULL << WIDX_STAFF_LIST_SECURITY_TAB)
-            | (1ULL << WIDX_STAFF_LIST_ENTERTAINERS_TAB) | (1ULL << WIDX_STAFF_LIST_HIRE_BUTTON)
-            | (1ULL << WIDX_STAFF_LIST_UNIFORM_COLOUR_PICKER) | (1ULL << WIDX_STAFF_LIST_SHOW_PATROL_AREA_BUTTON)
-            | (1ULL << WIDX_STAFF_LIST_MAP) | (1ULL << WIDX_STAFF_LIST_QUICK_FIRE);
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
 
         widgets[WIDX_STAFF_LIST_UNIFORM_COLOUR_PICKER].type = WindowWidgetType::Empty;
         min_width = WW;
@@ -124,7 +120,7 @@ public:
         CancelTools();
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -143,15 +139,15 @@ public:
                 break;
             }
             case WIDX_STAFF_LIST_SHOW_PATROL_AREA_BUTTON:
-                if (!tool_set(this, WIDX_STAFF_LIST_SHOW_PATROL_AREA_BUTTON, Tool::Crosshair))
+                if (!tool_set(*this, WIDX_STAFF_LIST_SHOW_PATROL_AREA_BUTTON, Tool::Crosshair))
                 {
                     show_gridlines();
-                    gStaffDrawPatrolAreas = _selectedTab | 0x8000;
+                    SetPatrolAreaToRender(GetSelectedStaffType());
                     gfx_invalidate_screen();
                 }
                 break;
             case WIDX_STAFF_LIST_MAP:
-                context_open_window(WC_MAP);
+                context_open_window(WindowClass::Map);
                 break;
             case WIDX_STAFF_LIST_QUICK_FIRE:
                 _quickFireMode = !_quickFireMode;
@@ -188,7 +184,7 @@ public:
             InvalidateWidget(WIDX_STAFF_LIST_HANDYMEN_TAB + _selectedTab);
 
             // Enable highlighting of these staff members in map window
-            if (window_find_by_class(WC_MAP) != nullptr)
+            if (window_find_by_class(WindowClass::Map) != nullptr)
             {
                 gWindowMapFlashingFlags |= MapFlashingFlags::StaffListOpen;
                 for (auto peep : EntityList<Staff>())
@@ -207,7 +203,7 @@ public:
         RefreshList();
     }
 
-    void OnMouseDown(rct_widgetindex widgetIndex) override
+    void OnMouseDown(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -232,7 +228,7 @@ public:
         }
     }
 
-    void OnDropdown(rct_widgetindex widgetIndex, int32_t dropdownIndex) override
+    void OnDropdown(WidgetIndex widgetIndex, int32_t dropdownIndex) override
     {
         if (widgetIndex == WIDX_STAFF_LIST_UNIFORM_COLOUR_PICKER)
         {
@@ -304,7 +300,7 @@ public:
 
         auto ft = Formatter();
         ft.Add<uint16_t>(_staffList.size());
-        ft.Add<rct_string_id>(staffTypeStringId);
+        ft.Add<StringId>(staffTypeStringId);
 
         DrawTextBasic(
             &dpi, windowPos + ScreenCoordsXY{ 4, widgets[WIDX_STAFF_LIST_LIST].bottom + 2 }, STR_STAFF_LIST_COUNTER, ft);
@@ -359,7 +355,7 @@ public:
                     auto peep = GetEntity<Staff>(spriteIndex);
                     if (peep != nullptr)
                     {
-                        auto intent = Intent(WC_PEEP);
+                        auto intent = Intent(WindowClass::Peep);
                         intent.putExtra(INTENT_EXTRA_PEEP, peep);
                         context_open_intent(&intent);
                     }
@@ -450,7 +446,7 @@ public:
         }
     }
 
-    void OnToolDown(rct_widgetindex widgetIndex, const ScreenCoordsXY& screenCoords) override
+    void OnToolDown(WidgetIndex widgetIndex, const ScreenCoordsXY& screenCoords) override
     {
         if (widgetIndex == WIDX_STAFF_LIST_SHOW_PATROL_AREA_BUTTON)
         {
@@ -464,19 +460,19 @@ public:
             else
             {
                 auto ft = Formatter();
-                ft.Add<rct_string_id>(GetStaffNamingConvention(GetSelectedStaffType()).Plural);
+                ft.Add<StringId>(GetStaffNamingConvention(GetSelectedStaffType()).Plural);
                 context_show_error(STR_NO_THING_IN_PARK_YET, STR_NONE, ft);
             }
         }
     }
 
-    void OnToolAbort(rct_widgetindex widgetIndex) override
+    void OnToolAbort(WidgetIndex widgetIndex) override
     {
         if (widgetIndex == WIDX_STAFF_LIST_SHOW_PATROL_AREA_BUTTON)
         {
             hide_gridlines();
             tool_cancel();
-            gStaffDrawPatrolAreas = 0xFFFF;
+            ClearPatrolAreaToRender();
             gfx_invalidate_screen();
         }
     }
@@ -495,8 +491,7 @@ public:
             }
         }
 
-        std::sort(
-            _staffList.begin(), _staffList.end(), [](const uint16_t a, const uint16_t b) { return peep_compare(a, b) < 0; });
+        std::sort(_staffList.begin(), _staffList.end(), [](const auto a, const auto b) { return peep_compare(a, b) < 0; });
     }
 
 private:
@@ -534,7 +529,7 @@ private:
             auto actionResult = res->GetData<StaffHireNewActionResult>();
             // Open window for new staff.
             auto* staff = GetEntity<Staff>(actionResult.StaffEntityId);
-            auto intent = Intent(WC_PEEP);
+            auto intent = Intent(WindowClass::Peep);
             intent.putExtra(INTENT_EXTRA_PEEP, staff);
             context_open_intent(&intent);
         });
@@ -599,7 +594,7 @@ private:
         if (footpathCoords.IsNull())
             return nullptr;
 
-        auto isPatrolAreaSet = staff_is_patrol_area_set_for_type(GetSelectedStaffType(), footpathCoords);
+        auto isPatrolAreaSet = IsPatrolAreaSetForStaffType(GetSelectedStaffType(), footpathCoords);
 
         Peep* closestPeep = nullptr;
         auto closestPeepDistance = std::numeric_limits<int32_t>::max();
@@ -710,12 +705,12 @@ private:
 
 rct_window* WindowStaffListOpen()
 {
-    return WindowFocusOrCreate<StaffListWindow>(WC_STAFF_LIST, WW, WH, WF_10 | WF_RESIZABLE);
+    return WindowFocusOrCreate<StaffListWindow>(WindowClass::StaffList, WW, WH, WF_10 | WF_RESIZABLE);
 }
 
 void WindowStaffListRefresh()
 {
-    auto* window = window_find_by_class(WC_STAFF_LIST);
+    auto* window = window_find_by_class(WindowClass::StaffList);
     if (window != nullptr)
     {
         static_cast<StaffListWindow*>(window)->RefreshList();

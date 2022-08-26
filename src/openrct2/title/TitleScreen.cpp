@@ -89,7 +89,7 @@ void TitleScreen::StopPreviewingSequence()
         rct_window* mainWindow = window_get_main();
         if (mainWindow != nullptr)
         {
-            window_unfollow_sprite(mainWindow);
+            window_unfollow_sprite(*mainWindow);
         }
         _previewingSequence = false;
         _currentSequence = title_get_config_sequence();
@@ -123,15 +123,15 @@ void TitleScreen::Load()
 
     gScreenFlags = SCREEN_FLAGS_TITLE_DEMO;
     gScreenAge = 0;
-    gCurrentLoadedPath = "";
+    gCurrentLoadedPath.clear();
 
 #ifndef DISABLE_NETWORK
     GetContext()->GetNetwork().Close();
 #endif
     OpenRCT2::Audio::StopAll();
-    GetContext()->GetGameState()->InitAll(150);
+    GetContext()->GetGameState()->InitAll(DEFAULT_MAP_SIZE);
     viewport_init_all();
-    context_open_window(WC_MAIN_WINDOW);
+    context_open_window(WindowClass::MainWindow);
     CreateWindows();
     TitleInitialise();
     OpenRCT2::Audio::PlayTitleMusic();
@@ -139,7 +139,7 @@ void TitleScreen::Load()
     if (gOpenRCT2ShowChangelog)
     {
         gOpenRCT2ShowChangelog = false;
-        context_open_window(WC_CHANGELOG);
+        context_open_window(WindowClass::Changelog);
     }
 
     if (_sequencePlayer != nullptr)
@@ -215,10 +215,10 @@ void TitleScreen::ChangePresetSequence(size_t preset)
  */
 void TitleScreen::CreateWindows()
 {
-    context_open_window(WC_TITLE_MENU);
-    context_open_window(WC_TITLE_EXIT);
-    context_open_window(WC_TITLE_OPTIONS);
-    context_open_window(WC_TITLE_LOGO);
+    context_open_window(WindowClass::TitleMenu);
+    context_open_window(WindowClass::TitleExit);
+    context_open_window(WindowClass::TitleOptions);
+    context_open_window(WindowClass::TitleLogo);
     window_resize_gui(context_get_width(), context_get_height());
     _hideVersionInfo = false;
 }
@@ -335,7 +335,8 @@ bool TitleScreen::TryLoadSequence(bool loadPreview)
         _loadedTitleSequenceId = SIZE_MAX;
         if (!loadPreview)
         {
-            GetContext()->GetGameState()->InitAll(150);
+            GetContext()->GetGameState()->InitAll(DEFAULT_MAP_SIZE);
+            game_notify_map_changed();
         }
         return false;
     }

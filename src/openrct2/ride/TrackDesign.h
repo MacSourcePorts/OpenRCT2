@@ -15,6 +15,9 @@
 #include "../rct12/RCT12.h"
 #include "../rct2/RCT2.h"
 #include "../world/Map.h"
+#include "VehicleColour.h"
+
+#include <memory>
 
 struct Ride;
 
@@ -104,7 +107,7 @@ struct TrackDesign
     RideMode ride_mode;
     uint8_t track_flags;
     uint8_t colour_scheme;
-    std::array<rct_vehicle_colour, RCT2::Limits::MaxTrainsPerRide> vehicle_colours;
+    std::array<VehicleColour, RCT2::Limits::MaxTrainsPerRide> vehicle_colours;
     uint8_t entrance_style;
     uint8_t total_air_time;
     uint8_t depart_flags;
@@ -134,7 +137,6 @@ struct TrackDesign
     ObjectEntryDescriptor vehicle_object;
     uint8_t space_required_x;
     uint8_t space_required_y;
-    uint8_t vehicle_additional_colour[RCT2::Limits::MaxTrainsPerRide];
     uint8_t lift_hill_speed;
     uint8_t num_circuits;
 
@@ -146,14 +148,14 @@ struct TrackDesign
     std::string name;
 
 public:
-    rct_string_id CreateTrackDesign(TrackDesignState& tds, const Ride& ride);
-    rct_string_id CreateTrackDesignScenery(TrackDesignState& tds);
+    StringId CreateTrackDesign(TrackDesignState& tds, const Ride& ride);
+    StringId CreateTrackDesignScenery(TrackDesignState& tds);
     void Serialise(DataSerialiser& stream);
 
 private:
     uint8_t _saveDirection;
-    rct_string_id CreateTrackDesignTrack(TrackDesignState& tds, const Ride& ride);
-    rct_string_id CreateTrackDesignMaze(TrackDesignState& tds, const Ride& ride);
+    StringId CreateTrackDesignTrack(TrackDesignState& tds, const Ride& ride);
+    StringId CreateTrackDesignMaze(TrackDesignState& tds, const Ride& ride);
     CoordsXYE MazeGetFirstElement(const Ride& ride);
 };
 
@@ -208,7 +210,7 @@ enum
     MAZE_ELEMENT_TYPE_EXIT = (1 << 7)
 };
 
-static constexpr ride_id_t PreviewRideId = static_cast<ride_id_t>(0);
+static constexpr RideId PreviewRideId = RideId::FromUnderlying(0);
 
 extern bool gTrackDesignSceneryToggle;
 
@@ -216,16 +218,16 @@ extern bool _trackDesignDrawingPreview;
 
 extern bool _trackDesignPlaceStateSceneryUnavailable;
 extern bool gTrackDesignSaveMode;
-extern ride_id_t gTrackDesignSaveRideIndex;
+extern RideId gTrackDesignSaveRideIndex;
 
 [[nodiscard]] std::unique_ptr<TrackDesign> TrackDesignImport(const utf8* path);
 
 void TrackDesignMirror(TrackDesign* td6);
 
-GameActions::Result TrackDesignPlace(TrackDesign* td6, uint32_t flags, bool placeScenery, Ride* ride, const CoordsXYZ& coords);
-void TrackDesignPreviewRemoveGhosts(TrackDesign* td6, Ride* ride, const CoordsXYZ& coords);
-void TrackDesignPreviewDrawOutlines(TrackDesignState& tds, TrackDesign* td6, Ride* ride, const CoordsXYZ& coords);
-int32_t TrackDesignGetZPlacement(TrackDesign* td6, Ride* ride, const CoordsXYZ& coords);
+GameActions::Result TrackDesignPlace(TrackDesign* td6, uint32_t flags, bool placeScenery, Ride* ride, const CoordsXYZD& coords);
+void TrackDesignPreviewRemoveGhosts(TrackDesign* td6, Ride* ride, const CoordsXYZD& coords);
+void TrackDesignPreviewDrawOutlines(TrackDesignState& tds, TrackDesign* td6, Ride* ride, const CoordsXYZD& coords);
+int32_t TrackDesignGetZPlacement(TrackDesign* td6, Ride* ride, const CoordsXYZD& coords);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Track design preview
@@ -238,7 +240,7 @@ void TrackDesignDrawPreview(TrackDesign* td6, uint8_t* pixels);
 void track_design_save_init();
 void track_design_save_reset_scenery();
 bool track_design_save_contains_tile_element(const TileElement* tileElement);
-void track_design_save_select_nearby_scenery(ride_id_t rideIndex);
+void track_design_save_select_nearby_scenery(RideId rideIndex);
 void track_design_save_select_tile_element(
     ViewportInteractionItem interactionType, const CoordsXY& loc, TileElement* tileElement, bool collect);
 

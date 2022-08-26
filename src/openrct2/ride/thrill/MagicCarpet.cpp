@@ -94,7 +94,7 @@ static ImageIndex GetMagicCarpetPendulumImage(Plane plane, Direction direction, 
     return imageIndex;
 }
 
-static const Vehicle* GetFirstVehicle(const Ride& ride)
+static Vehicle* GetFirstVehicle(const Ride& ride)
 {
     if (ride.lifecycle_flags & RIDE_LIFECYCLE_ON_TRACK)
     {
@@ -110,7 +110,7 @@ static void PaintMagicCarpetRiders(
     if (session.DPI.zoom_level > ZoomLevel{ 1 })
         return;
 
-    auto baseImageIndex = rideEntry.vehicles[0].base_image_id + 4 + direction;
+    auto baseImageIndex = rideEntry.Cars[0].base_image_id + 4 + direction;
     for (uint8_t peepIndex = 0; peepIndex < vehicle.num_peeps; peepIndex += 2)
     {
         auto imageIndex = baseImageIndex + (peepIndex * 2);
@@ -180,7 +180,7 @@ static void PaintMagicCarpetVehicle(
     {
         imageTemplate = ImageId::FromUInt32(imageFlags);
     }
-    auto vehicleImageIndex = rideEntry->vehicles[0].base_image_id + direction;
+    auto vehicleImageIndex = rideEntry->Cars[0].base_image_id + direction;
     PaintAddImageAsChild(session, imageTemplate.WithIndex(vehicleImageIndex), offset, bbSize, bbOffset);
 
     auto* vehicle = GetFirstVehicle(ride);
@@ -193,15 +193,13 @@ static void PaintMagicCarpetVehicle(
 static void PaintMagicCarpetStructure(
     paint_session& session, const Ride& ride, uint8_t direction, int8_t axisOffset, uint16_t height)
 {
-    const TileElement* savedTileElement = static_cast<const TileElement*>(session.CurrentlyDrawnItem);
-
     auto swing = 0;
     auto* vehicle = GetFirstVehicle(ride);
     if (vehicle != nullptr)
     {
         swing = vehicle->Pitch;
         session.InteractionType = ViewportInteractionItem::Entity;
-        session.CurrentlyDrawnItem = vehicle;
+        session.CurrentlyDrawnEntity = vehicle;
     }
 
     bound_box bb = MagicCarpetBounds[direction];
@@ -222,8 +220,8 @@ static void PaintMagicCarpetStructure(
     PaintMagicCarpetPendulum(session, Plane::Front, swing, direction, offset, bbOffset, bbSize);
     PaintMagicCarpetFrame(session, Plane::Front, direction, offset, bbOffset, bbSize);
 
+    session.CurrentlyDrawnEntity = nullptr;
     session.InteractionType = ViewportInteractionItem::Ride;
-    session.CurrentlyDrawnItem = savedTileElement;
 }
 
 static void PaintMagicCarpet(

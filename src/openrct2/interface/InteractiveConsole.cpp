@@ -17,8 +17,10 @@
 #include "../ReplayManager.h"
 #include "../Version.h"
 #include "../actions/ClimateSetAction.h"
+#include "../actions/ParkSetParameterAction.h"
 #include "../actions/RideSetPriceAction.h"
 #include "../actions/RideSetSettingAction.h"
+#include "../actions/ScenarioSetSettingAction.h"
 #include "../actions/SetCheatAction.h"
 #include "../actions/StaffSetCostumeAction.h"
 #include "../config/Config.h"
@@ -44,7 +46,7 @@
 #include "../object/ObjectList.h"
 #include "../object/ObjectManager.h"
 #include "../object/ObjectRepository.h"
-#include "../platform/platform.h"
+#include "../platform/Platform.h"
 #include "../profiling/Profiling.h"
 #include "../ride/Ride.h"
 #include "../ride/RideData.h"
@@ -164,7 +166,7 @@ static int32_t cc_rides(InteractiveConsole& console, const arguments_t& argv)
                     for (int32_t i = 0; i < static_cast<uint8_t>(RideMode::Count); i++)
                     {
                         char mode_name[128] = { 0 };
-                        rct_string_id mode_string_id = RideModeNames[i];
+                        StringId mode_string_id = RideModeNames[i];
                         format_string(mode_name, 128, mode_string_id, nullptr);
                         console.WriteFormatLine("%02d - %s", i, mode_name);
                     }
@@ -196,7 +198,7 @@ static int32_t cc_rides(InteractiveConsole& console, const arguments_t& argv)
                 }
                 else
                 {
-                    int32_t res = set_operating_setting(static_cast<ride_id_t>(ride_index), RideSetSetting::RideType, type);
+                    int32_t res = set_operating_setting(RideId::FromUnderlying(ride_index), RideSetSetting::RideType, type);
                     if (res == MONEY32_UNDEFINED)
                     {
                         if (!gCheatsAllowArbitraryRideTypeChanges)
@@ -226,7 +228,7 @@ static int32_t cc_rides(InteractiveConsole& console, const arguments_t& argv)
                 }
                 else
                 {
-                    auto ride = get_ride(static_cast<ride_id_t>(ride_index));
+                    auto ride = get_ride(RideId::FromUnderlying(ride_index));
                     if (mode >= static_cast<uint8_t>(RideMode::Count))
                     {
                         console.WriteFormatLine("Invalid ride mode.");
@@ -258,7 +260,7 @@ static int32_t cc_rides(InteractiveConsole& console, const arguments_t& argv)
                 }
                 else
                 {
-                    auto ride = get_ride(static_cast<ride_id_t>(ride_index));
+                    auto ride = get_ride(RideId::FromUnderlying(ride_index));
                     if (mass <= 0)
                     {
                         console.WriteFormatLine("Friction value must be strictly positive");
@@ -296,7 +298,7 @@ static int32_t cc_rides(InteractiveConsole& console, const arguments_t& argv)
                 }
                 else
                 {
-                    auto ride = get_ride(static_cast<ride_id_t>(ride_index));
+                    auto ride = get_ride(RideId::FromUnderlying(ride_index));
                     if (excitement <= 0)
                     {
                         console.WriteFormatLine("Excitement value must be strictly positive");
@@ -327,7 +329,7 @@ static int32_t cc_rides(InteractiveConsole& console, const arguments_t& argv)
                 }
                 else
                 {
-                    auto ride = get_ride(static_cast<ride_id_t>(ride_index));
+                    auto ride = get_ride(RideId::FromUnderlying(ride_index));
                     if (intensity <= 0)
                     {
                         console.WriteFormatLine("Intensity value must be strictly positive");
@@ -358,7 +360,7 @@ static int32_t cc_rides(InteractiveConsole& console, const arguments_t& argv)
                 }
                 else
                 {
-                    auto ride = get_ride(static_cast<ride_id_t>(ride_index));
+                    auto ride = get_ride(RideId::FromUnderlying(ride_index));
                     if (nausea <= 0)
                     {
                         console.WriteFormatLine("Nausea value must be strictly positive");
@@ -428,7 +430,7 @@ static int32_t cc_rides(InteractiveConsole& console, const arguments_t& argv)
                     }
                     else
                     {
-                        auto rideSetPrice = RideSetPriceAction(static_cast<ride_id_t>(rideId), price, true);
+                        auto rideSetPrice = RideSetPriceAction(RideId::FromUnderlying(rideId), price, true);
                         GameActions::Execute(&rideSetPrice);
                     }
                 }
@@ -465,7 +467,7 @@ static int32_t cc_staff(InteractiveConsole& console, const arguments_t& argv)
                 for (int32_t i = 0; i < static_cast<uint8_t>(EntertainerCostume::Count); i++)
                 {
                     char costume_name[128] = { 0 };
-                    rct_string_id costume = StaffCostumeNames[i];
+                    StringId costume = StaffCostumeNames[i];
                     format_string(costume_name, 128, STR_DROPDOWN_MENU_LABEL, &costume);
                     // That's a terrible hack here. Costume names include inline sprites
                     // that don't work well with the console, so manually skip past them.
@@ -482,7 +484,7 @@ static int32_t cc_staff(InteractiveConsole& console, const arguments_t& argv)
 
                 if (int_valid[0] && int_valid[1])
                 {
-                    Peep* peep = GetEntity<Peep>(int_val[0]);
+                    Peep* peep = GetEntity<Peep>(EntityId::FromUnderlying(int_val[0]));
                     if (peep != nullptr)
                     {
                         peep->Energy = int_val[1];
@@ -501,7 +503,7 @@ static int32_t cc_staff(InteractiveConsole& console, const arguments_t& argv)
                     console.WriteLineError("Invalid staff ID");
                     return 1;
                 }
-                auto staff = GetEntity<Staff>(int_val[0]);
+                auto staff = GetEntity<Staff>(EntityId::FromUnderlying(int_val[0]));
                 if (staff == nullptr)
                 {
                     console.WriteLineError("Invalid staff ID");
@@ -519,7 +521,7 @@ static int32_t cc_staff(InteractiveConsole& console, const arguments_t& argv)
                 }
 
                 EntertainerCostume costume = static_cast<EntertainerCostume>(int_val[1]);
-                auto staffSetCostumeAction = StaffSetCostumeAction(int_val[0], costume);
+                auto staffSetCostumeAction = StaffSetCostumeAction(EntityId::FromUnderlying(int_val[0]), costume);
                 GameActions::Execute(&staffSetCostumeAction);
             }
         }
@@ -752,13 +754,13 @@ static int32_t cc_set(InteractiveConsole& console, const arguments_t& argv)
 
         if (argv[0] == "money" && invalidArguments(&invalidArgs, double_valid[0]))
         {
-            money32 money = MONEY(static_cast<int32_t>(double_val[0]), (static_cast<int32_t>(double_val[0] * 100)) % 100);
+            money32 money = ToMoney32FromGBP(double_val[0]);
             if (gCash != money)
             {
                 auto setCheatAction = SetCheatAction(CheatType::SetMoney, money);
                 setCheatAction.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
                     if (res->Error != GameActions::Status::Ok)
-                        console.WriteLineError("Network error: Permission denied!");
+                        console.WriteLineError("set money command failed, likely due to permissions.");
                     else
                         console.Execute("get money");
                 });
@@ -771,70 +773,156 @@ static int32_t cc_set(InteractiveConsole& console, const arguments_t& argv)
         }
         else if (argv[0] == "scenario_initial_cash" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            gInitialCash = std::clamp(MONEY(int_val[0], 0), MONEY(0, 0), MONEY(1000000, 00));
-            console.Execute("get scenario_initial_cash");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::InitialCash, std::clamp(ToMoney32FromGBP(int_val[0]), 0.00_GBP, 1000000.00_GBP));
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set scenario_initial_cash command failed, likely due to permissions.");
+                else
+                    console.Execute("get scenario_initial_cash");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "current_loan" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            gBankLoan = std::clamp<money64>(MONEY(int_val[0] - (int_val[0] % 1000), 0), MONEY(0, 0), gMaxBankLoan);
-            console.Execute("get current_loan");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::InitialLoan,
+                std::clamp<money64>(
+                    ToMoney32FromGBP(int_val[0]) - ToMoney32FromGBP(int_val[0] % 1000), 0.00_GBP, gMaxBankLoan));
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set current_loan command failed, likely due to permissions.");
+                else
+                    console.Execute("get current_loan");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "max_loan" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            gMaxBankLoan = std::clamp(MONEY(int_val[0] - (int_val[0] % 1000), 0), MONEY(0, 0), MONEY(5000000, 0));
-            console.Execute("get max_loan");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::MaximumLoanSize,
+                std::clamp(ToMoney32FromGBP(int_val[0]) - ToMoney32FromGBP(int_val[0] % 1000), 0.00_GBP, 5000000.00_GBP));
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set max_loan command failed, likely due to permissions.");
+                else
+                    console.Execute("get max_loan");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "guest_initial_cash" && invalidArguments(&invalidArgs, double_valid[0]))
         {
-            gGuestInitialCash = std::clamp(
-                MONEY(static_cast<int32_t>(double_val[0]), (static_cast<int32_t>(double_val[0] * 100)) % 100), MONEY(0, 0),
-                MONEY(1000, 0));
-            console.Execute("get guest_initial_cash");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::AverageCashPerGuest, std::clamp(ToMoney32FromGBP(double_val[0]), 0.00_GBP, 1000.00_GBP));
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set guest_initial_cash command failed, likely due to permissions.");
+                else
+                    console.Execute("get guest_initial_cash");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "guest_initial_happiness" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            gGuestInitialHappiness = calculate_guest_initial_happiness(static_cast<uint8_t>(int_val[0]));
-            console.Execute("get guest_initial_happiness");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::GuestInitialHappiness, calculate_guest_initial_happiness(static_cast<uint8_t>(int_val[0])));
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set guest_initial_happiness command failed, likely due to permissions.");
+                else
+                    console.Execute("get guest_initial_happiness");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "guest_initial_hunger" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            gGuestInitialHunger = (std::clamp(int_val[0], 1, 84) * 255 / 100 - 255) * -1;
-            console.Execute("get guest_initial_hunger");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::GuestInitialHunger, (std::clamp(int_val[0], 1, 84) * 255 / 100 - 255) * -1);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set guest_initial_hunger command failed, likely due to permissions.");
+                else
+                    console.Execute("get guest_initial_happiness");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "guest_initial_thirst" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            gGuestInitialThirst = (std::clamp(int_val[0], 1, 84) * 255 / 100 - 255) * -1;
-            console.Execute("get guest_initial_thirst");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::GuestInitialThirst, (std::clamp(int_val[0], 1, 84) * 255 / 100 - 255) * -1);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set guest_initial_thirst command failed, likely due to permissions.");
+                else
+                    console.Execute("get guest_initial_thirst");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "guest_prefer_less_intense_rides" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_PREF_LESS_INTENSE_RIDES, int_val[0]);
-            console.Execute("get guest_prefer_less_intense_rides");
+            auto scenarioSetSetting = ScenarioSetSettingAction(ScenarioSetSetting::GuestsPreferLessIntenseRides, int_val[0]);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set guest_prefer_less_intense_rides command failed, likely due to permissions.");
+                else
+                    console.Execute("get guest_prefer_less_intense_rides");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "guest_prefer_more_intense_rides" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_PREF_MORE_INTENSE_RIDES, int_val[0]);
-            console.Execute("get guest_prefer_more_intense_rides");
+            auto scenarioSetSetting = ScenarioSetSettingAction(ScenarioSetSetting::GuestsPreferMoreIntenseRides, int_val[0]);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set guest_prefer_more_intense_rides command failed, likely due to permissions.");
+                else
+                    console.Execute("get guest_prefer_more_intense_rides");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "forbid_marketing_campaigns" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_FORBID_MARKETING_CAMPAIGN, int_val[0]);
-            console.Execute("get forbid_marketing_campaigns");
+            auto scenarioSetSetting = ScenarioSetSettingAction(ScenarioSetSetting::ForbidMarketingCampaigns, int_val[0]);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set forbid_marketing_campaigns command failed, likely due to permissions.");
+                else
+                    console.Execute("get forbid_marketing_campaigns");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "forbid_landscape_changes" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_FORBID_LANDSCAPE_CHANGES, int_val[0]);
-            console.Execute("get forbid_landscape_changes");
+            auto scenarioSetSetting = ScenarioSetSettingAction(ScenarioSetSetting::ForbidLandscapeChanges, int_val[0]);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set forbid_landscape_changes command failed, likely due to permissions.");
+                else
+                    console.Execute("get forbid_landscape_changes");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "forbid_tree_removal" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_FORBID_TREE_REMOVAL, int_val[0]);
-            console.Execute("get forbid_tree_removal");
+            auto scenarioSetSetting = ScenarioSetSettingAction(ScenarioSetSetting::ForbidTreeRemoval, int_val[0]);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set forbid_tree_removal command failed, likely due to permissions.");
+                else
+                    console.Execute("get forbid_tree_removal");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "forbid_high_construction" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_FORBID_HIGH_CONSTRUCTION, int_val[0]);
-            console.Execute("get forbid_high_construction");
+            auto scenarioSetSetting = ScenarioSetSettingAction(ScenarioSetSetting::ForbidHighConstruction, int_val[0]);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set forbid_high_construction command failed, likely due to permissions.");
+                else
+                    console.Execute("get forbid_high_construction");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "pay_for_rides" && invalidArguments(&invalidArgs, int_valid[0]))
         {
@@ -843,37 +931,73 @@ static int32_t cc_set(InteractiveConsole& console, const arguments_t& argv)
         }
         else if (argv[0] == "no_money" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_NO_MONEY, int_val[0]);
-            console.Execute("get no_money");
+            auto setCheatAction = SetCheatAction(CheatType::NoMoney, int_val[0] != 0);
+            setCheatAction.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set no_money command failed, likely due to permissions.");
+                else
+                    console.Execute("get no_money");
+            });
+            GameActions::Execute(&setCheatAction);
         }
         else if (argv[0] == "difficult_park_rating" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_DIFFICULT_PARK_RATING, int_val[0]);
-            console.Execute("get difficult_park_rating");
+            auto scenarioSetSetting = ScenarioSetSettingAction(ScenarioSetSetting::ParkRatingHigherDifficultyLevel, int_val[0]);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set difficult_park_rating command failed, likely due to permissions.");
+                else
+                    console.Execute("get difficult_park_rating");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "difficult_guest_generation" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_DIFFICULT_GUEST_GENERATION, int_val[0]);
-            console.Execute("get difficult_guest_generation");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::GuestGenerationHigherDifficultyLevel, int_val[0]);
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set difficult_guest_generation command failed, likely due to permissions.");
+                else
+                    console.Execute("get difficult_guest_generation");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "park_open" && invalidArguments(&invalidArgs, int_valid[0]))
         {
-            SET_FLAG(gParkFlags, PARK_FLAGS_PARK_OPEN, int_val[0]);
-            console.Execute("get park_open");
+            auto parkSetParameter = ParkSetParameterAction((int_val[0] == 1) ? ParkParameter::Open : ParkParameter::Close);
+            parkSetParameter.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set park_open command failed, likely due to permissions.");
+                else
+                    console.Execute("get park_open");
+            });
+            GameActions::Execute(&parkSetParameter);
         }
         else if (argv[0] == "land_rights_cost" && invalidArguments(&invalidArgs, double_valid[0]))
         {
-            gLandPrice = std::clamp(
-                MONEY(static_cast<int32_t>(double_val[0]), (static_cast<int32_t>(double_val[0] * 100)) % 100), MONEY(0, 0),
-                MONEY(200, 0));
-            console.Execute("get land_rights_cost");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::CostToBuyLand, std::clamp(ToMoney32FromGBP(double_val[0]), 0.00_GBP, 200.00_GBP));
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set land_rights_cost command failed, likely due to permissions.");
+                else
+                    console.Execute("get land_rights_cost");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "construction_rights_cost" && invalidArguments(&invalidArgs, double_valid[0]))
         {
-            gConstructionRightsPrice = std::clamp(
-                MONEY(static_cast<int32_t>(double_val[0]), (static_cast<int32_t>(double_val[0] * 100)) % 100), MONEY(0, 0),
-                MONEY(200, 0));
-            console.Execute("get construction_rights_cost");
+            auto scenarioSetSetting = ScenarioSetSettingAction(
+                ScenarioSetSetting::CostToBuyConstructionRights,
+                std::clamp(ToMoney32FromGBP(double_val[0]), 0.00_GBP, 200.00_GBP));
+            scenarioSetSetting.SetCallback([&console](const GameAction*, const GameActions::Result* res) {
+                if (res->Error != GameActions::Status::Ok)
+                    console.WriteLineError("set construction_rights_cost command failed, likely due to permissions.");
+                else
+                    console.Execute("get construction_rights_cost");
+            });
+            GameActions::Execute(&scenarioSetSetting);
         }
         else if (argv[0] == "climate")
         {
@@ -1024,7 +1148,7 @@ static int32_t cc_set(InteractiveConsole& console, const arguments_t& argv)
             }
             else if (newRotation != currentRotation && mainWindow != nullptr)
             {
-                window_rotate_camera(mainWindow, newRotation - currentRotation);
+                window_rotate_camera(*mainWindow, newRotation - currentRotation);
             }
             console.Execute("get current_rotation");
         }
@@ -1103,13 +1227,12 @@ static int32_t cc_load_object(InteractiveConsole& console, const arguments_t& ar
         {
             // Automatically research the ride so it's supported by the game.
             rct_ride_entry* rideEntry;
-            int32_t rideType;
 
             rideEntry = get_ride_entry(groupIndex);
 
             for (int32_t j = 0; j < RCT2::ObjectLimits::MaxRideTypesPerRideEntry; j++)
             {
-                rideType = rideEntry->ride_type[j];
+                auto rideType = rideEntry->ride_type[j];
                 if (rideType != RIDE_TYPE_NULL)
                 {
                     ResearchCategory category = GetRideTypeDescriptor(rideType).GetResearchCategory();
@@ -1149,18 +1272,19 @@ static int32_t cc_object_count(InteractiveConsole& console, [[maybe_unused]] con
         "Paths", "Path Additions", "Scenery groups", "Park entrances", "Water",
     };
 
-    for (ObjectType i = ObjectType::Ride; i < ObjectType::ScenarioText; i++)
+    for (auto objectType : ObjectTypes)
     {
         int32_t entryGroupIndex = 0;
-        for (; entryGroupIndex < object_entry_group_counts[EnumValue(i)]; entryGroupIndex++)
+        for (; entryGroupIndex < object_entry_group_counts[EnumValue(objectType)]; entryGroupIndex++)
         {
-            if (object_entry_get_chunk(i, entryGroupIndex) == nullptr)
+            if (object_entry_get_chunk(objectType, entryGroupIndex) == nullptr)
             {
                 break;
             }
         }
         console.WriteFormatLine(
-            "%s: %d/%d", object_type_names[EnumValue(i)], entryGroupIndex, object_entry_group_counts[EnumValue(i)]);
+            "%s: %d/%d", object_type_names[EnumValue(objectType)], entryGroupIndex,
+            object_entry_group_counts[EnumValue(objectType)]);
     }
 
     return 0;
@@ -1182,7 +1306,7 @@ static int32_t cc_open(InteractiveConsole& console, const arguments_t& argv)
             {
                 // Only this window should be open for safety reasons
                 window_close_all();
-                context_open_window(WC_EDITOR_OBJECT_SELECTION);
+                context_open_window(WindowClass::EditorObjectSelection);
             }
         }
         else if (argv[0] == "inventions_list" && invalidArguments(&invalidTitle, !title))
@@ -1193,12 +1317,12 @@ static int32_t cc_open(InteractiveConsole& console, const arguments_t& argv)
             }
             else
             {
-                context_open_window(WC_EDITOR_INVENTION_LIST);
+                context_open_window(WindowClass::EditorInventionList);
             }
         }
         else if (argv[0] == "scenario_options" && invalidArguments(&invalidTitle, !title))
         {
-            context_open_window(WC_EDITOR_SCENARIO_OPTIONS);
+            context_open_window(WindowClass::EditorScenarioOptions);
         }
         else if (argv[0] == "objective_options" && invalidArguments(&invalidTitle, !title))
         {
@@ -1208,20 +1332,16 @@ static int32_t cc_open(InteractiveConsole& console, const arguments_t& argv)
             }
             else
             {
-                context_open_window(WC_EDITOR_OBJECTIVE_OPTIONS);
+                context_open_window(WindowClass::EditorObjectiveOptions);
             }
         }
         else if (argv[0] == "options")
         {
-            context_open_window(WC_OPTIONS);
+            context_open_window(WindowClass::Options);
         }
         else if (argv[0] == "themes")
         {
-            context_open_window(WC_THEMES);
-        }
-        else if (argv[0] == "title_sequences")
-        {
-            context_open_window(WC_TITLE_EDITOR);
+            context_open_window(WindowClass::Themes);
         }
         else if (invalidTitle)
         {
@@ -1342,7 +1462,7 @@ static int32_t cc_for_date([[maybe_unused]] InteractiveConsole& console, [[maybe
     }
 
     date_set(year, month, day);
-    window_invalidate_by_class(WC_BOTTOM_TOOLBAR);
+    window_invalidate_by_class(WindowClass::BottomToolbar);
 
     return 1;
 }
@@ -2025,8 +2145,5 @@ void InteractiveConsole::WriteFormatLine(const char* format, ...)
     va_start(list, format);
     auto buffer = String::Format_VA(format, list);
     va_end(list);
-
-    auto s = std::string(buffer);
-    std::free(buffer);
-    WriteLine(s);
+    WriteLine(buffer);
 }

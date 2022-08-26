@@ -25,12 +25,12 @@
 #include "NewsItem.h"
 
 const money16 AdvertisingCampaignPricePerWeek[] = {
-    MONEY(50, 00),  // PARK_ENTRY_FREE
-    MONEY(50, 00),  // RIDE_FREE
-    MONEY(50, 00),  // PARK_ENTRY_HALF_PRICE
-    MONEY(50, 00),  // FOOD_OR_DRINK_FREE
-    MONEY(350, 00), // PARK
-    MONEY(200, 00), // RIDE
+    50.00_GBP,  // PARK_ENTRY_FREE
+    50.00_GBP,  // RIDE_FREE
+    50.00_GBP,  // PARK_ENTRY_HALF_PRICE
+    50.00_GBP,  // FOOD_OR_DRINK_FREE
+    350.00_GBP, // PARK
+    200.00_GBP, // RIDE
 };
 
 static constexpr const uint16_t AdvertisingCampaignGuestGenerationProbabilities[] = {
@@ -50,17 +50,17 @@ uint16_t marketing_get_campaign_guest_generation_probability(int32_t campaignTyp
     switch (campaign->Type)
     {
         case ADVERTISING_CAMPAIGN_PARK_ENTRY_FREE:
-            if (park_get_entrance_fee() < MONEY(4, 00))
+            if (park_get_entrance_fee() < 4.00_GBP)
                 probability /= 8;
             break;
         case ADVERTISING_CAMPAIGN_PARK_ENTRY_HALF_PRICE:
-            if (park_get_entrance_fee() < MONEY(6, 00))
+            if (park_get_entrance_fee() < 6.00_GBP)
                 probability /= 8;
             break;
         case ADVERTISING_CAMPAIGN_RIDE_FREE:
         {
             auto ride = get_ride(campaign->RideId);
-            if (ride == nullptr || ride->price[0] < MONEY(0, 30))
+            if (ride == nullptr || ride->price[0] < 0.30_GBP)
                 probability /= 8;
             break;
         }
@@ -85,7 +85,7 @@ static void marketing_raise_finished_notification(const MarketingCampaign& campa
         }
         else if (campaign.Type == ADVERTISING_CAMPAIGN_FOOD_OR_DRINK_FREE)
         {
-            ft.Add<rct_string_id>(GetShopItemDescriptor(campaign.ShopItemType).Naming.Plural);
+            ft.Add<StringId>(GetShopItemDescriptor(campaign.ShopItemType).Naming.Plural);
         }
 
         News::AddItemToQueue(News::ItemType::Money, MarketingCampaignNames[campaign.Type][2], 0, ft);
@@ -128,7 +128,7 @@ void marketing_update()
         }
     }
 
-    window_invalidate_by_class(WC_FINANCES);
+    window_invalidate_by_class(WindowClass::Finances);
 }
 
 void marketing_set_guest_campaign(Guest* peep, int32_t campaignType)
@@ -243,7 +243,7 @@ void marketing_new_campaign(const MarketingCampaign& campaign)
     }
 }
 
-void MarketingCancelCampaignsForRide(const ride_id_t rideId)
+void MarketingCancelCampaignsForRide(const RideId rideId)
 {
     auto isCampaignForRideFn = [&rideId](MarketingCampaign& campaign) {
         if (campaign.Type == ADVERTISING_CAMPAIGN_RIDE_FREE || campaign.Type == ADVERTISING_CAMPAIGN_RIDE)

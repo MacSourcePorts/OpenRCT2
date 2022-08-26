@@ -25,7 +25,7 @@
 #include <openrct2/world/Scenery.h>
 #include <openrct2/world/Wall.h>
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_SIGN;
+static constexpr const StringId WINDOW_TITLE = STR_SIGN;
 static constexpr const int32_t WW = 113;
 static constexpr const int32_t WH = 96;
 
@@ -58,6 +58,9 @@ class SignWindow final : public Window
 {
 private:
     bool _isSmall = false;
+    ObjectEntryIndex _sceneryEntry = OBJECT_ENTRY_INDEX_NULL;
+    colour_t _mainColour = {};
+    colour_t _textColour = {};
 
     BannerIndex GetBannerIndex() const
     {
@@ -78,10 +81,7 @@ public:
     void OnOpen() override
     {
         widgets = window_sign_widgets;
-        enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_SIGN_TEXT) | (1ULL << WIDX_SIGN_DEMOLISH)
-            | (1ULL << WIDX_MAIN_COLOUR) | (1ULL << WIDX_TEXT_COLOUR);
-
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
     }
 
     /*
@@ -113,9 +113,9 @@ public:
             {
                 return false;
             }
-            list_information_type = wallElement->GetPrimaryColour();
-            var_492 = wallElement->GetSecondaryColour();
-            SceneryEntry = wallElement->GetEntryIndex();
+            _mainColour = wallElement->GetPrimaryColour();
+            _textColour = wallElement->GetSecondaryColour();
+            _sceneryEntry = wallElement->GetEntryIndex();
         }
         else
         {
@@ -124,9 +124,9 @@ public:
             {
                 return false;
             }
-            list_information_type = sceneryElement->GetPrimaryColour();
-            var_492 = sceneryElement->GetSecondaryColour();
-            SceneryEntry = sceneryElement->GetEntryIndex();
+            _mainColour = sceneryElement->GetPrimaryColour();
+            _textColour = sceneryElement->GetSecondaryColour();
+            _sceneryEntry = sceneryElement->GetEntryIndex();
         }
 
         // Create viewport
@@ -141,7 +141,7 @@ public:
         return true;
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         auto* banner = GetBanner(GetBannerIndex());
         if (banner == nullptr)
@@ -185,21 +185,21 @@ public:
         }
     }
 
-    void OnMouseDown(rct_widgetindex widgetIndex) override
+    void OnMouseDown(WidgetIndex widgetIndex) override
     {
         rct_widget* widget = &widgets[widgetIndex];
         switch (widgetIndex)
         {
             case WIDX_MAIN_COLOUR:
-                WindowDropdownShowColour(this, widget, TRANSLUCENT(colours[1]), static_cast<uint8_t>(list_information_type));
+                WindowDropdownShowColour(this, widget, TRANSLUCENT(colours[1]), static_cast<uint8_t>(_mainColour));
                 break;
             case WIDX_TEXT_COLOUR:
-                WindowDropdownShowColour(this, widget, TRANSLUCENT(colours[1]), static_cast<uint8_t>(var_492));
+                WindowDropdownShowColour(this, widget, TRANSLUCENT(colours[1]), static_cast<uint8_t>(_textColour));
                 break;
         }
     }
 
-    void OnDropdown(rct_widgetindex widgetIndex, int32_t dropdownIndex) override
+    void OnDropdown(WidgetIndex widgetIndex, int32_t dropdownIndex) override
     {
         switch (widgetIndex)
         {
@@ -207,8 +207,8 @@ public:
             {
                 if (dropdownIndex == -1)
                     return;
-                list_information_type = dropdownIndex;
-                auto signSetStyleAction = SignSetStyleAction(GetBannerIndex(), dropdownIndex, var_492, !_isSmall);
+                _mainColour = dropdownIndex;
+                auto signSetStyleAction = SignSetStyleAction(GetBannerIndex(), dropdownIndex, _textColour, !_isSmall);
                 GameActions::Execute(&signSetStyleAction);
                 break;
             }
@@ -216,8 +216,8 @@ public:
             {
                 if (dropdownIndex == -1)
                     return;
-                var_492 = dropdownIndex;
-                auto signSetStyleAction = SignSetStyleAction(GetBannerIndex(), list_information_type, dropdownIndex, !_isSmall);
+                _textColour = dropdownIndex;
+                auto signSetStyleAction = SignSetStyleAction(GetBannerIndex(), _mainColour, dropdownIndex, !_isSmall);
                 GameActions::Execute(&signSetStyleAction);
                 break;
             }
@@ -228,7 +228,7 @@ public:
         Invalidate();
     }
 
-    void OnTextInput(rct_widgetindex widgetIndex, std::string_view text) override
+    void OnTextInput(WidgetIndex widgetIndex, std::string_view text) override
     {
         if (widgetIndex == WIDX_SIGN_TEXT && !text.empty())
         {
@@ -244,7 +244,7 @@ public:
 
         if (_isSmall)
         {
-            auto* wallEntry = get_wall_entry(SceneryEntry);
+            auto* wallEntry = get_wall_entry(_sceneryEntry);
 
             main_colour_btn->type = WindowWidgetType::Empty;
             text_colour_btn->type = WindowWidgetType::Empty;
@@ -260,7 +260,7 @@ public:
         }
         else
         {
-            auto* sceneryEntry = get_large_scenery_entry(SceneryEntry);
+            auto* sceneryEntry = get_large_scenery_entry(_sceneryEntry);
 
             main_colour_btn->type = WindowWidgetType::Empty;
             text_colour_btn->type = WindowWidgetType::Empty;
@@ -275,8 +275,8 @@ public:
             }
         }
 
-        main_colour_btn->image = SPRITE_ID_PALETTE_COLOUR_1(list_information_type) | IMAGE_TYPE_TRANSPARENT | SPR_PALETTE_BTN;
-        text_colour_btn->image = SPRITE_ID_PALETTE_COLOUR_1(var_492) | IMAGE_TYPE_TRANSPARENT | SPR_PALETTE_BTN;
+        main_colour_btn->image = SPRITE_ID_PALETTE_COLOUR_1(_mainColour) | IMAGE_TYPE_TRANSPARENT | SPR_PALETTE_BTN;
+        text_colour_btn->image = SPRITE_ID_PALETTE_COLOUR_1(_textColour) | IMAGE_TYPE_TRANSPARENT | SPR_PALETTE_BTN;
     }
 
     void OnDraw(rct_drawpixelinfo& dpi) override
@@ -285,7 +285,7 @@ public:
 
         if (viewport != nullptr)
         {
-            window_draw_viewport(&dpi, this);
+            window_draw_viewport(&dpi, *this);
         }
     }
 
@@ -318,12 +318,12 @@ public:
  */
 rct_window* WindowSignOpen(rct_windownumber number)
 {
-    auto* w = static_cast<SignWindow*>(window_bring_to_front_by_number(WC_BANNER, number));
+    auto* w = static_cast<SignWindow*>(window_bring_to_front_by_number(WindowClass::Banner, number));
 
     if (w != nullptr)
         return w;
 
-    w = WindowCreate<SignWindow>(WC_BANNER, WW, WH, 0);
+    w = WindowCreate<SignWindow>(WindowClass::Banner, WW, WH, 0);
 
     if (w == nullptr)
         return nullptr;
@@ -341,12 +341,12 @@ rct_window* WindowSignOpen(rct_windownumber number)
  */
 rct_window* WindowSignSmallOpen(rct_windownumber number)
 {
-    auto* w = static_cast<SignWindow*>(window_bring_to_front_by_number(WC_BANNER, number));
+    auto* w = static_cast<SignWindow*>(window_bring_to_front_by_number(WindowClass::Banner, number));
 
     if (w != nullptr)
         return w;
 
-    w = WindowCreate<SignWindow>(WC_BANNER, WW, WH, 0);
+    w = WindowCreate<SignWindow>(WindowClass::Banner, WW, WH, 0);
 
     if (w == nullptr)
         return nullptr;

@@ -150,7 +150,7 @@ void Duck::UpdateFlyToWater()
 
 void Duck::UpdateSwim()
 {
-    if (((gCurrentTicks + sprite_index) & 3) != 0)
+    if (((gCurrentTicks + sprite_index.ToUnderlying()) & 3) != 0)
         return;
 
     uint32_t randomNumber = scenario_rand();
@@ -203,7 +203,7 @@ void Duck::UpdateSwim()
                 landZ = tile_element_height(destination);
                 waterZ = tile_element_water_height(destination);
 
-                if (z >= landZ && z == waterZ)
+                if (z > landZ && z == waterZ)
                 {
                     destination.z = waterZ;
                     MoveTo(destination);
@@ -303,7 +303,7 @@ void Duck::Create(const CoordsXY& pos)
     switch (direction)
     {
         case 0:
-            targetPos.x = 8191 - (scenario_rand() & 0x3F);
+            targetPos.x = GetMapSizeMaxXY().x - (scenario_rand() & 0x3F);
             break;
         case 1:
             targetPos.y = scenario_rand() & 0x3F;
@@ -312,7 +312,7 @@ void Duck::Create(const CoordsXY& pos)
             targetPos.x = scenario_rand() & 0x3F;
             break;
         case 3:
-            targetPos.y = 8191 - (scenario_rand() & 0x3F);
+            targetPos.y = GetMapSizeMaxXY().y - (scenario_rand() & 0x3F);
             break;
     }
     duck->sprite_direction = direction << 3;

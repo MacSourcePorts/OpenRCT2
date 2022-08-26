@@ -37,7 +37,6 @@ static void PaintMotionSimulatorVehicle(
     if (rideEntry == nullptr)
         return;
 
-    const TileElement* savedTileElement = static_cast<const TileElement*>(session.CurrentlyDrawnItem);
     CoordsXYZ offset(offsetX, offsetY, height + 2);
 
     Vehicle* vehicle = nullptr;
@@ -47,11 +46,11 @@ static void PaintMotionSimulatorVehicle(
         if (vehicle != nullptr)
         {
             session.InteractionType = ViewportInteractionItem::Entity;
-            session.CurrentlyDrawnItem = vehicle;
+            session.CurrentlyDrawnEntity = vehicle;
         }
     }
 
-    auto imageIndex = rideEntry->vehicles[0].base_image_id + direction;
+    auto imageIndex = rideEntry->Cars[0].base_image_id + direction;
     if (vehicle != nullptr)
     {
         if (vehicle->restraints_position >= 64)
@@ -97,7 +96,7 @@ static void PaintMotionSimulatorVehicle(
             break;
     }
 
-    session.CurrentlyDrawnItem = savedTileElement;
+    session.CurrentlyDrawnEntity = nullptr;
     session.InteractionType = ViewportInteractionItem::Ride;
 }
 

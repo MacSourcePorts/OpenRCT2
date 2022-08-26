@@ -28,7 +28,7 @@ using namespace OpenRCT2;
 
 struct rct_draw_scroll_text
 {
-    rct_string_id string_id;
+    StringId string_id;
     uint8_t string_args[32];
     colour_t colour;
     uint16_t position;
@@ -108,7 +108,7 @@ void scrolling_text_initialise_bitmaps()
         g1.offset = _drawScrollTextList[i].bitmap;
         g1.x_offset = -32;
         g1.y_offset = 0;
-        g1.flags = G1_FLAG_BMP;
+        g1.flags = G1_FLAG_HAS_TRANSPARENCY;
         g1.width = 64;
         g1.height = 40;
         g1.offset[0] = 0xFF;
@@ -134,7 +134,7 @@ static uint8_t* font_sprite_get_codepoint_bitmap(int32_t codepoint)
 }
 
 static int32_t scrolling_text_get_matching_or_oldest(
-    rct_string_id stringId, Formatter& ft, uint16_t scroll, uint16_t scrollingMode, colour_t colour)
+    StringId stringId, Formatter& ft, uint16_t scroll, uint16_t scrollingMode, colour_t colour)
 {
     uint32_t oldestId = 0xFFFFFFFF;
     int32_t scrollIndex = -1;
@@ -1447,7 +1447,7 @@ void scrolling_text_invalidate()
 }
 
 int32_t scrolling_text_setup(
-    paint_session& session, rct_string_id stringId, Formatter& ft, uint16_t scroll, uint16_t scrollingMode, colour_t colour)
+    paint_session& session, StringId stringId, Formatter& ft, uint16_t scroll, uint16_t scrollingMode, colour_t colour)
 {
     std::scoped_lock<std::mutex> lock(_scrollingTextMutex);
 

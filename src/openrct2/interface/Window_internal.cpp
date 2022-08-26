@@ -2,11 +2,12 @@
 
 #include "../entity/EntityList.h"
 #include "../entity/EntityRegistry.h"
+#include "Cursors.h"
 #include "Viewport.h"
 
 void rct_window::SetLocation(const CoordsXYZ& coords)
 {
-    window_scroll_to_location(this, coords);
+    window_scroll_to_location(*this, coords);
     flags &= ~WF_SCROLLING_TO_LOCATION;
 }
 
@@ -19,7 +20,7 @@ void rct_window::ScrollToViewport()
 
     auto mainWindow = window_get_main();
     if (mainWindow != nullptr)
-        window_scroll_to_location(mainWindow, newCoords);
+        window_scroll_to_location(*mainWindow, newCoords);
 }
 
 void rct_window::Invalidate()
@@ -34,4 +35,9 @@ void rct_window::RemoveViewport()
 
     viewport_remove(viewport);
     viewport = nullptr;
+}
+
+CursorID rct_window::OnCursor(WidgetIndex, const ScreenCoordsXY&, CursorID)
+{
+    return CursorID::Arrow;
 }

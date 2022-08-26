@@ -17,7 +17,7 @@
 #include "../localisation/Localisation.h"
 #include "../management/Finance.h"
 #include "../network/network.h"
-#include "../platform/platform.h"
+#include "../platform/Platform.h"
 #include "../rct1/RCT1.h"
 #include "../util/SawyerCoding.h"
 #include "../util/Util.h"
@@ -70,7 +70,7 @@ int32_t track_is_connected_by_shape(TileElement* a, TileElement* b)
     return aBank == bBank && aAngle == bAngle;
 }
 
-static TileElement* find_station_element(const CoordsXYZD& loc, ride_id_t rideIndex)
+static TileElement* find_station_element(const CoordsXYZD& loc, RideId rideIndex)
 {
     TileElement* tileElement = map_get_first_element_at(loc);
     if (tileElement == nullptr)
@@ -95,12 +95,12 @@ static TileElement* find_station_element(const CoordsXYZD& loc, ride_id_t rideIn
 
 static void ride_remove_station(Ride* ride, const CoordsXYZ& location)
 {
-    for (int32_t i = 0; i < OpenRCT2::Limits::MaxStationsPerRide; i++)
+    for (auto& station : ride->GetStations())
     {
-        auto stationStart = ride->stations[i].GetStart();
+        auto stationStart = station.GetStart();
         if (stationStart == location)
         {
-            ride->stations[i].Start.SetNull();
+            station.Start.SetNull();
             ride->num_stations--;
             break;
         }
@@ -111,11 +111,11 @@ static void ride_remove_station(Ride* ride, const CoordsXYZ& location)
  *
  *  rct2: 0x006C4D89
  */
-bool track_add_station_element(CoordsXYZD loc, ride_id_t rideIndex, int32_t flags, bool fromTrackDesign)
+ResultWithMessage track_add_station_element(CoordsXYZD loc, RideId rideIndex, int32_t flags, bool fromTrackDesign)
 {
     auto ride = get_ride(rideIndex);
     if (ride == nullptr)
-        return false;
+        return { false };
 
     CoordsXY stationBackLoc = loc;
     CoordsXY stationFrontLoc = loc;
@@ -125,22 +125,22 @@ bool track_add_station_element(CoordsXYZD loc, ride_id_t rideIndex, int32_t flag
     {
         if (ride->num_stations >= OpenRCT2::Limits::MaxStationsPerRide)
         {
-            gGameCommandErrorText = STR_NO_MORE_STATIONS_ALLOWED_ON_THIS_RIDE;
-            return false;
+            return { false, STR_NO_MORE_STATIONS_ALLOWED_ON_THIS_RIDE };
         }
         if (flags & GAME_COMMAND_FLAG_APPLY)
         {
             auto stationIndex = ride_get_first_empty_station_start(ride);
-            assert(stationIndex != STATION_INDEX_NULL);
+            assert(!stationIndex.IsNull());
 
-            ride->stations[stationIndex].Start.x = loc.x;
-            ride->stations[stationIndex].Start.y = loc.y;
-            ride->stations[stationIndex].Height = loc.z / COORDS_Z_STEP;
-            ride->stations[stationIndex].Depart = 1;
-            ride->stations[stationIndex].Length = 0;
+            auto& station = ride->GetStation(stationIndex);
+            station.Start.x = loc.x;
+            station.Start.y = loc.y;
+            station.Height = loc.z / COORDS_Z_STEP;
+            station.Depart = 1;
+            station.Length = 0;
             ride->num_stations++;
         }
-        return true;
+        return { true };
     }
 
     TileElement* stationElement;
@@ -194,14 +194,12 @@ bool track_add_station_element(CoordsXYZD loc, ride_id_t rideIndex, int32_t flag
     // This _might_ cause issues if the track designs is bugged and actually has 5.
     if (stationBackLoc == stationFrontLoc && ride->num_stations >= OpenRCT2::Limits::MaxStationsPerRide && !fromTrackDesign)
     {
-        gGameCommandErrorText = STR_NO_MORE_STATIONS_ALLOWED_ON_THIS_RIDE;
-        return false;
+        return { false, STR_NO_MORE_STATIONS_ALLOWED_ON_THIS_RIDE };
     }
 
     if (stationLength > MAX_STATION_PLATFORM_LENGTH)
     {
-        gGameCommandErrorText = STR_STATION_PLATFORM_TOO_LONG;
-        return false;
+        return { false, STR_STATION_PLATFORM_TOO_LONG };
     }
 
     if (flags & GAME_COMMAND_FLAG_APPLY)
@@ -220,16 +218,17 @@ bool track_add_station_element(CoordsXYZD loc, ride_id_t rideIndex, int32_t flag
                 if (stationFrontLoc == loc)
                 {
                     auto stationIndex = ride_get_first_empty_station_start(ride);
-                    if (stationIndex == STATION_INDEX_NULL)
+                    if (stationIndex.IsNull())
                     {
                         log_verbose("No empty station starts, not updating metadata! This can happen with hacked rides.");
                     }
                     else
                     {
-                        ride->stations[stationIndex].Start = loc;
-                        ride->stations[stationIndex].Height = loc.z / COORDS_Z_STEP;
-                        ride->stations[stationIndex].Depart = 1;
-                        ride->stations[stationIndex].Length = stationLength;
+                        auto& station = ride->GetStation(stationIndex);
+                        station.Start = loc;
+                        station.Height = loc.z / COORDS_Z_STEP;
+                        station.Depart = 1;
+                        station.Length = stationLength;
                         ride->num_stations++;
                     }
 
@@ -255,18 +254,18 @@ bool track_add_station_element(CoordsXYZD loc, ride_id_t rideIndex, int32_t flag
             }
         } while (!finaliseStationDone);
     }
-    return true;
+    return { true };
 }
 
 /**
  *
  *  rct2: 0x006C494B
  */
-bool track_remove_station_element(const CoordsXYZD& loc, ride_id_t rideIndex, int32_t flags)
+ResultWithMessage track_remove_station_element(const CoordsXYZD& loc, RideId rideIndex, int32_t flags)
 {
     auto ride = get_ride(rideIndex);
     if (ride == nullptr)
-        return false;
+        return { false };
 
     CoordsXYZD removeLoc = loc;
     CoordsXYZD stationBackLoc = loc;
@@ -284,7 +283,7 @@ bool track_remove_station_element(const CoordsXYZD& loc, ride_id_t rideIndex, in
                 ride_remove_station(ride, loc);
             }
         }
-        return true;
+        return { true };
     }
 
     TileElement* stationElement;
@@ -333,11 +332,10 @@ bool track_remove_station_element(const CoordsXYZD& loc, ride_id_t rideIndex, in
         if ((removeLoc != stationBackLoc) && (removeLoc != stationFrontLoc)
             && ride->num_stations >= OpenRCT2::Limits::MaxStationsPerRide)
         {
-            gGameCommandErrorText = STR_NO_MORE_STATIONS_ALLOWED_ON_THIS_RIDE;
-            return false;
+            return { false, STR_NO_MORE_STATIONS_ALLOWED_ON_THIS_RIDE };
         }
 
-        return true;
+        return { true };
     }
 
     currentLoc = stationFrontLoc;
@@ -355,16 +353,17 @@ bool track_remove_station_element(const CoordsXYZD& loc, ride_id_t rideIndex, in
                 if ((currentLoc == stationFrontLoc) || (currentLoc + CoordsDirectionDelta[currentLoc.direction] == removeLoc))
                 {
                     auto stationIndex = ride_get_first_empty_station_start(ride);
-                    if (stationIndex == STATION_INDEX_NULL)
+                    if (stationIndex.IsNull())
                     {
                         log_verbose("No empty station starts, not updating metadata! This can happen with hacked rides.");
                     }
                     else
                     {
-                        ride->stations[stationIndex].Start = currentLoc;
-                        ride->stations[stationIndex].Height = currentLoc.z / COORDS_Z_STEP;
-                        ride->stations[stationIndex].Depart = 1;
-                        ride->stations[stationIndex].Length = stationLength != 0 ? stationLength : byte_F441D1;
+                        auto& station = ride->GetStation(stationIndex);
+                        station.Start = currentLoc;
+                        station.Height = currentLoc.z / COORDS_Z_STEP;
+                        station.Depart = 1;
+                        station.Length = stationLength != 0 ? stationLength : byte_F441D1;
                         ride->num_stations++;
                     }
 
@@ -402,7 +401,7 @@ bool track_remove_station_element(const CoordsXYZD& loc, ride_id_t rideIndex, in
         }
     } while (!finaliseStationDone);
 
-    return true;
+    return { true };
 }
 
 void track_circuit_iterator_begin(track_circuit_iterator* it, CoordsXYE first)
@@ -656,9 +655,26 @@ bool track_element_is_covered(track_type_t trackElementType)
 
 bool TrackTypeHasSpeedSetting(track_type_t trackType)
 {
-    // This does not check if the element is really a Spinning Control track instead of a booster,
-    // but this does not cause problems.
     return trackType == TrackElemType::Brakes || trackType == TrackElemType::Booster;
+}
+
+std::optional<CoordsXYZD> GetTrackSegmentOrigin(const CoordsXYE& posEl)
+{
+    auto trackEl = posEl.element->AsTrack();
+    if (trackEl == nullptr)
+        return {};
+
+    const auto& ted = GetTrackElementDescriptor(trackEl->GetTrackType());
+    auto direction = trackEl->GetDirection();
+    auto coords = CoordsXYZ(posEl.x, posEl.y, trackEl->GetBaseZ());
+
+    // Subtract the current sequence's offset
+    const auto* trackBlock = &ted.Block[trackEl->GetSequenceIndex()];
+    CoordsXY trackBlockOffset = { trackBlock->x, trackBlock->y };
+    coords += trackBlockOffset.Rotate(direction_reverse(direction));
+    coords.z -= trackBlock->z;
+
+    return CoordsXYZD(coords, direction);
 }
 
 uint8_t TrackElement::GetSeatRotation() const
@@ -667,58 +683,58 @@ uint8_t TrackElement::GetSeatRotation() const
     if (ride != nullptr && ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_HAS_LANDSCAPE_DOORS))
         return DEFAULT_SEAT_ROTATION;
 
-    return ColourScheme >> 4;
+    return URide.ColourScheme >> 4;
 }
 
 void TrackElement::SetSeatRotation(uint8_t newSeatRotation)
 {
-    ColourScheme &= ~TRACK_ELEMENT_COLOUR_SEAT_ROTATION_MASK;
-    ColourScheme |= (newSeatRotation << 4);
+    URide.ColourScheme &= ~TRACK_ELEMENT_COLOUR_SEAT_ROTATION_MASK;
+    URide.ColourScheme |= (newSeatRotation << 4);
 }
 
 bool TrackElement::IsTakingPhoto() const
 {
-    return OnridePhotoBits != 0;
+    return URide.OnridePhotoBits != 0;
 }
 
 void TrackElement::SetPhotoTimeout()
 {
-    OnridePhotoBits = 3;
+    URide.OnridePhotoBits = 3;
 }
 
 void TrackElement::SetPhotoTimeout(uint8_t value)
 {
-    OnridePhotoBits = value;
+    URide.OnridePhotoBits = value;
 }
 
 uint8_t TrackElement::GetPhotoTimeout() const
 {
-    return OnridePhotoBits;
+    return URide.OnridePhotoBits;
 }
 
 void TrackElement::DecrementPhotoTimeout()
 {
-    OnridePhotoBits = std::max(0, OnridePhotoBits - 1);
+    URide.OnridePhotoBits = std::max(0, URide.OnridePhotoBits - 1);
 }
 
 uint16_t TrackElement::GetMazeEntry() const
 {
-    return MazeEntry;
+    return UMaze.MazeEntry;
 }
 
 void TrackElement::SetMazeEntry(uint16_t newMazeEntry)
 {
-    MazeEntry = newMazeEntry;
+    UMaze.MazeEntry = newMazeEntry;
 }
 
 void TrackElement::MazeEntryAdd(uint16_t addVal)
 {
-    MazeEntry |= addVal;
+    UMaze.MazeEntry |= addVal;
 }
 
 void TrackElement::MazeEntrySubtract(uint16_t subVal)
 {
-    MazeEntry &= ~subVal;
+    UMaze.MazeEntry &= ~subVal;
 }
 
 track_type_t TrackElement::GetTrackType() const
@@ -743,65 +759,65 @@ void TrackElement::SetRideType(const ride_type_t rideType)
 
 uint8_t TrackElement::GetSequenceIndex() const
 {
-    return Sequence;
+    return URide.Sequence;
 }
 
 void TrackElement::SetSequenceIndex(uint8_t newSequenceIndex)
 {
-    Sequence = newSequenceIndex;
+    URide.Sequence = newSequenceIndex;
 }
 
-uint8_t TrackElement::GetStationIndex() const
+StationIndex TrackElement::GetStationIndex() const
 {
-    return StationIndex;
+    return URide.stationIndex;
 }
 
-void TrackElement::SetStationIndex(uint8_t newStationIndex)
+void TrackElement::SetStationIndex(StationIndex newStationIndex)
 {
-    StationIndex = newStationIndex;
+    URide.stationIndex = newStationIndex;
 }
 
 uint8_t TrackElement::GetDoorAState() const
 {
-    return (ColourScheme & TRACK_ELEMENT_COLOUR_DOOR_A_MASK) >> 2;
+    return (URide.ColourScheme & TRACK_ELEMENT_COLOUR_DOOR_A_MASK) >> 2;
 }
 
 uint8_t TrackElement::GetDoorBState() const
 {
-    return (ColourScheme & TRACK_ELEMENT_COLOUR_DOOR_B_MASK) >> 5;
+    return (URide.ColourScheme & TRACK_ELEMENT_COLOUR_DOOR_B_MASK) >> 5;
 }
 
 void TrackElement::SetDoorAState(uint8_t newState)
 {
-    ColourScheme &= ~TRACK_ELEMENT_COLOUR_DOOR_A_MASK;
-    ColourScheme |= ((newState << 2) & TRACK_ELEMENT_COLOUR_DOOR_A_MASK);
+    URide.ColourScheme &= ~TRACK_ELEMENT_COLOUR_DOOR_A_MASK;
+    URide.ColourScheme |= ((newState << 2) & TRACK_ELEMENT_COLOUR_DOOR_A_MASK);
 }
 
 void TrackElement::SetDoorBState(uint8_t newState)
 {
-    ColourScheme &= ~TRACK_ELEMENT_COLOUR_DOOR_B_MASK;
-    ColourScheme |= ((newState << 5) & TRACK_ELEMENT_COLOUR_DOOR_B_MASK);
+    URide.ColourScheme &= ~TRACK_ELEMENT_COLOUR_DOOR_B_MASK;
+    URide.ColourScheme |= ((newState << 5) & TRACK_ELEMENT_COLOUR_DOOR_B_MASK);
 }
 
-ride_id_t TrackElement::GetRideIndex() const
+RideId TrackElement::GetRideIndex() const
 {
     return RideIndex;
 }
 
-void TrackElement::SetRideIndex(ride_id_t newRideIndex)
+void TrackElement::SetRideIndex(RideId newRideIndex)
 {
     RideIndex = newRideIndex;
 }
 
 uint8_t TrackElement::GetColourScheme() const
 {
-    return ColourScheme & TRACK_ELEMENT_COLOUR_SCHEME_MASK;
+    return URide.ColourScheme & TRACK_ELEMENT_COLOUR_SCHEME_MASK;
 }
 
 void TrackElement::SetColourScheme(uint8_t newColourScheme)
 {
-    ColourScheme &= ~TRACK_ELEMENT_COLOUR_SCHEME_MASK;
-    ColourScheme |= (newColourScheme & TRACK_ELEMENT_COLOUR_SCHEME_MASK);
+    URide.ColourScheme &= ~TRACK_ELEMENT_COLOUR_SCHEME_MASK;
+    URide.ColourScheme |= (newColourScheme & TRACK_ELEMENT_COLOUR_SCHEME_MASK);
 }
 
 bool TrackElement::HasCableLift() const
@@ -869,12 +885,12 @@ void TrackElement::SetIsIndestructible(bool isIndestructible)
 
 uint8_t TrackElement::GetBrakeBoosterSpeed() const
 {
-    return BrakeBoosterSpeed << 1;
+    return URide.BrakeBoosterSpeed << 1;
 }
 
 void TrackElement::SetBrakeBoosterSpeed(uint8_t speed)
 {
-    BrakeBoosterSpeed = (speed >> 1);
+    URide.BrakeBoosterSpeed = (speed >> 1);
 }
 
 bool TrackElement::HasGreenLight() const

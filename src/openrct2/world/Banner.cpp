@@ -48,7 +48,7 @@ void Banner::FormatTextTo(Formatter& ft, bool addColour) const
     {
         auto formatToken = FormatTokenFromTextColour(text_colour);
         auto tokenText = FormatTokenToString(formatToken, true);
-        ft.Add<rct_string_id>(STR_STRING_STRINGID);
+        ft.Add<StringId>(STR_STRING_STRINGID);
         ft.Add<const char*>(tokenText.data());
     }
 
@@ -59,7 +59,7 @@ void Banner::FormatTextTo(Formatter& ft) const
 {
     if (flags & BANNER_FLAG_NO_ENTRY)
     {
-        ft.Add<rct_string_id>(STR_NO_ENTRY);
+        ft.Add<StringId>(STR_NO_ENTRY);
     }
     else if (flags & BANNER_FLAG_LINKED_TO_RIDE)
     {
@@ -70,16 +70,16 @@ void Banner::FormatTextTo(Formatter& ft) const
         }
         else
         {
-            ft.Add<rct_string_id>(STR_DEFAULT_SIGN);
+            ft.Add<StringId>(STR_DEFAULT_SIGN);
         }
     }
     else if (text.empty())
     {
-        ft.Add<rct_string_id>(STR_DEFAULT_SIGN);
+        ft.Add<StringId>(STR_DEFAULT_SIGN);
     }
     else
     {
-        ft.Add<rct_string_id>(STR_STRING).Add<const char*>(text.c_str());
+        ft.Add<StringId>(STR_STRING).Add<const char*>(text.c_str());
     }
 }
 
@@ -87,10 +87,10 @@ void Banner::FormatTextTo(Formatter& ft) const
  *
  *  rct2: 0x006B7EAB
  */
-static ride_id_t banner_get_ride_index_at(const CoordsXYZ& bannerCoords)
+static RideId banner_get_ride_index_at(const CoordsXYZ& bannerCoords)
 {
     TileElement* tileElement = map_get_first_element_at(bannerCoords);
-    ride_id_t resultRideIndex = RIDE_ID_NULL;
+    RideId resultRideIndex = RideId::GetNull();
     if (tileElement == nullptr)
         return resultRideIndex;
     do
@@ -98,9 +98,9 @@ static ride_id_t banner_get_ride_index_at(const CoordsXYZ& bannerCoords)
         if (tileElement->GetType() != TileElementType::Track)
             continue;
 
-        ride_id_t rideIndex = tileElement->AsTrack()->GetRideIndex();
+        RideId rideIndex = tileElement->AsTrack()->GetRideIndex();
         auto ride = get_ride(rideIndex);
-        if (ride == nullptr || ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IS_SHOP))
+        if (ride == nullptr || ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IS_SHOP_OR_FACILITY))
             continue;
 
         if ((tileElement->GetClearanceZ()) + (4 * COORDS_Z_STEP) <= bannerCoords.z)
@@ -193,7 +193,7 @@ WallElement* banner_get_scrolling_wall_tile_element(BannerIndex bannerIndex)
  *
  *  rct2: 0x006B7D86
  */
-ride_id_t banner_get_closest_ride_index(const CoordsXYZ& mapPos)
+RideId banner_get_closest_ride_index(const CoordsXYZ& mapPos)
 {
     static constexpr const std::array NeighbourCheckOrder = {
         CoordsXY{ COORDS_XY_STEP, 0 },
@@ -209,18 +209,18 @@ ride_id_t banner_get_closest_ride_index(const CoordsXYZ& mapPos)
 
     for (const auto& neighhbourCoords : NeighbourCheckOrder)
     {
-        ride_id_t rideIndex = banner_get_ride_index_at({ CoordsXY{ mapPos } + neighhbourCoords, mapPos.z });
-        if (rideIndex != RIDE_ID_NULL)
+        RideId rideIndex = banner_get_ride_index_at({ CoordsXY{ mapPos } + neighhbourCoords, mapPos.z });
+        if (!rideIndex.IsNull())
         {
             return rideIndex;
         }
     }
 
-    auto rideIndex = RIDE_ID_NULL;
+    auto rideIndex = RideId::GetNull();
     auto resultDistance = std::numeric_limits<int32_t>::max();
     for (auto& ride : GetRideManager())
     {
-        if (ride.GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IS_SHOP))
+        if (ride.GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IS_SHOP_OR_FACILITY))
             continue;
 
         auto rideCoords = ride.overall_view;
@@ -285,7 +285,7 @@ void fix_duplicated_banners()
                         log_error("Failed to create new banner.");
                         continue;
                     }
-                    Guard::Assert(!activeBanners[index]);
+                    Guard::Assert(!activeBanners[newBanner->id.ToUnderlying()]);
 
                     // Copy over the original banner, but update the location
                     const auto* oldBanner = GetBanner(bannerIndex);
@@ -366,19 +366,19 @@ void UnlinkAllRideBanners()
         if (!banner.IsNull())
         {
             banner.flags &= ~BANNER_FLAG_LINKED_TO_RIDE;
-            banner.ride_index = RIDE_ID_NULL;
+            banner.ride_index = RideId::GetNull();
         }
     }
 }
 
-void UnlinkAllBannersForRide(ride_id_t rideId)
+void UnlinkAllBannersForRide(RideId rideId)
 {
     for (auto& banner : _banners)
     {
         if (!banner.IsNull() && (banner.flags & BANNER_FLAG_LINKED_TO_RIDE) && banner.ride_index == rideId)
         {
             banner.flags &= ~BANNER_FLAG_LINKED_TO_RIDE;
-            banner.ride_index = RIDE_ID_NULL;
+            banner.ride_index = RideId::GetNull();
             banner.text = {};
         }
     }

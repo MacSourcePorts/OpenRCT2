@@ -13,9 +13,14 @@
 #include "../entity/Staff.h"
 #include "../interface/Window.h"
 
-StaffFireAction::StaffFireAction(uint16_t spriteId)
+StaffFireAction::StaffFireAction(EntityId spriteId)
     : _spriteId(spriteId)
 {
+}
+
+void StaffFireAction::AcceptParameters(GameActionParameterVisitor& visitor)
+{
+    visitor.Visit("id", _spriteId);
 }
 
 uint16_t StaffFireAction::GetActionFlags() const
@@ -31,7 +36,7 @@ void StaffFireAction::Serialise(DataSerialiser& stream)
 
 GameActions::Result StaffFireAction::Query() const
 {
-    if (_spriteId >= MAX_ENTITIES)
+    if (_spriteId.ToUnderlying() >= MAX_ENTITIES || _spriteId.IsNull())
     {
         log_error("Invalid spriteId. spriteId = %u", _spriteId);
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
@@ -55,7 +60,7 @@ GameActions::Result StaffFireAction::Execute() const
         log_error("Invalid spriteId. spriteId = %u", _spriteId);
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
     }
-    window_close_by_class(WC_FIRE_PROMPT);
+    window_close_by_class(WindowClass::FirePrompt);
     peep_sprite_remove(staff);
     // Due to patrol areas best to invalidate the whole screen on removal of staff
     gfx_invalidate_screen();

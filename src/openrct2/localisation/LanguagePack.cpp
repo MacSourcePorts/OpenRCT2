@@ -29,10 +29,10 @@ constexpr uint64_t MAX_LANGUAGE_SIZE = 64 * 1024 * 1024;
 constexpr uint64_t MAX_OBJECT_OVERRIDES = 4096;
 constexpr uint64_t MAX_SCENARIO_OVERRIDES = 4096;
 
-constexpr rct_string_id ObjectOverrideBase = 0x6000;
+constexpr StringId ObjectOverrideBase = 0x6000;
 constexpr int32_t ObjectOverrideMaxStringCount = 3;
 
-constexpr rct_string_id ScenarioOverrideBase = 0x7000;
+constexpr StringId ScenarioOverrideBase = 0x7000;
 constexpr int32_t ScenarioOverrideMaxStringCount = 3;
 
 struct ObjectOverride
@@ -114,7 +114,7 @@ public:
         }
 
         // Clean up the parsing work data
-        _currentGroup = std::string();
+        _currentGroup.clear();
         _currentObjectOverride = nullptr;
         _currentScenarioOverride = nullptr;
     }
@@ -129,15 +129,15 @@ public:
         return static_cast<uint32_t>(_strings.size());
     }
 
-    void RemoveString(rct_string_id stringId) override
+    void RemoveString(StringId stringId) override
     {
         if (_strings.size() > static_cast<size_t>(stringId))
         {
-            _strings[stringId] = std::string();
+            _strings[stringId].clear();
         }
     }
 
-    void SetString(rct_string_id stringId, const std::string& str) override
+    void SetString(StringId stringId, const std::string& str) override
     {
         if (_strings.size() > static_cast<size_t>(stringId))
         {
@@ -145,7 +145,7 @@ public:
         }
     }
 
-    const utf8* GetString(rct_string_id stringId) const override
+    const utf8* GetString(StringId stringId) const override
     {
         if (stringId >= ScenarioOverrideBase)
         {
@@ -185,7 +185,7 @@ public:
         return nullptr;
     }
 
-    rct_string_id GetObjectOverrideStringId(std::string_view legacyIdentifier, uint8_t index) override
+    StringId GetObjectOverrideStringId(std::string_view legacyIdentifier, uint8_t index) override
     {
         Guard::Assert(index < ObjectOverrideMaxStringCount);
 
@@ -206,7 +206,7 @@ public:
         return STR_NONE;
     }
 
-    rct_string_id GetScenarioOverrideStringId(const utf8* scenarioFilename, uint8_t index) override
+    StringId GetScenarioOverrideStringId(const utf8* scenarioFilename, uint8_t index) override
     {
         Guard::ArgumentNotNull(scenarioFilename);
         Guard::Assert(index < ScenarioOverrideMaxStringCount);
@@ -566,7 +566,7 @@ private:
             }
             else
             {
-                _currentScenarioOverride->strings[stringId] = s;
+                _currentScenarioOverride->strings[stringId] = std::move(s);
             }
         }
     }

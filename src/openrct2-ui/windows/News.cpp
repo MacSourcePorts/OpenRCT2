@@ -21,7 +21,7 @@
 #include <openrct2/management/NewsItem.h>
 #include <openrct2/sprites.h>
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_RECENT_MESSAGES;
+static constexpr const StringId WINDOW_TITLE = STR_RECENT_MESSAGES;
 static constexpr const int32_t WH = 300;
 static constexpr const int32_t WW = 400;
 
@@ -42,6 +42,8 @@ static rct_widget window_news_widgets[] = {
     WIDGETS_END,
 };
 
+// clang-format on
+
 class NewsWindow final : public Window
 {
 private:
@@ -55,18 +57,17 @@ public:
     void OnOpen() override
     {
         widgets = window_news_widgets;
-        enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_SETTINGS);
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
         _pressedNewsItemIndex = -1;
 
         int32_t w = 0, h = 0;
         rct_widget* widget = &widgets[WIDX_SCROLL];
         window_get_scroll_size(this, 0, &w, &h);
         scrolls[0].v_top = std::max(0, h - (widget->height() - 1));
-        WidgetScrollUpdateThumbs(this, WIDX_SCROLL);
+        WidgetScrollUpdateThumbs(*this, WIDX_SCROLL);
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -74,7 +75,7 @@ public:
                 Close();
                 break;
             case WIDX_SETTINGS:
-                context_open_window(WC_NOTIFICATION_OPTIONS);
+                context_open_window(WindowClass::NotificationOptions);
                 break;
         }
     }
@@ -113,15 +114,15 @@ public:
             auto subjectLoc = News::GetSubjectLocation(newsItem.Type, newsItem.Assoc);
             if (subjectLoc.has_value() && (_mainWindow = window_get_main()) != nullptr)
             {
-                window_scroll_to_location(_mainWindow, subjectLoc.value());
+                window_scroll_to_location(*_mainWindow, subjectLoc.value());
             }
         }
     }
 
     ScreenSize OnScrollGetSize(int32_t scrollIndex) override
     {
-        static int32_t _scrollHeight = static_cast<int32_t>(gNewsItems.GetArchived().size()) * CalculateItemHeight();
-        return {WW, _scrollHeight};
+        int32_t scrollHeight = static_cast<int32_t>(gNewsItems.GetArchived().size()) * CalculateItemHeight();
+        return { WW, scrollHeight };
     }
 
     void OnScrollMouseDown(int32_t scrollIndex, const ScreenCoordsXY& screenCoords) override
@@ -190,13 +191,14 @@ public:
 
             // Background
             gfx_fill_rect_inset(
-                &dpi, { -1, y, 383, y + itemHeight - 1 }, colours[1], (INSET_RECT_FLAG_BORDER_INSET | INSET_RECT_FLAG_FILL_GREY));
+                &dpi, { -1, y, 383, y + itemHeight - 1 }, colours[1],
+                (INSET_RECT_FLAG_BORDER_INSET | INSET_RECT_FLAG_FILL_GREY));
 
             // Date text
             {
                 auto ft = Formatter();
-                ft.Add<rct_string_id>(DateDayNames[newsItem.Day - 1]);
-                ft.Add<rct_string_id>(DateGameMonthNames[date_get_month(newsItem.MonthYear)]);
+                ft.Add<StringId>(DateDayNames[newsItem.Day - 1]);
+                ft.Add<StringId>(DateGameMonthNames[date_get_month(newsItem.MonthYear)]);
                 DrawTextBasic(&dpi, { 2, y }, STR_NEWS_DATE_FORMAT, ft, { COLOUR_WHITE, FontSpriteBase::SMALL });
             }
             // Item text
@@ -218,7 +220,6 @@ public:
                     {
                         press = INSET_RECT_FLAG_BORDER_INSET;
                     }
-
                 }
                 gfx_fill_rect_inset(&dpi, { screenCoords, screenCoords + ScreenCoordsXY{ 23, 23 } }, colours[2], press);
 
@@ -236,7 +237,7 @@ public:
                             break;
                         }
 
-                        auto peep = TryGetEntity<Peep>(newsItem.Assoc);
+                        auto peep = TryGetEntity<Peep>(EntityId::FromUnderlying(newsItem.Assoc));
                         if (peep == nullptr)
                         {
                             break;
@@ -310,5 +311,5 @@ public:
 
 rct_window* WindowNewsOpen()
 {
-    return WindowFocusOrCreate<NewsWindow>(WC_RECENT_NEWS, WW, WH, 0);
+    return WindowFocusOrCreate<NewsWindow>(WindowClass::RecentNews, WW, WH, 0);
 }

@@ -29,7 +29,7 @@ constexpr const RideTypeDescriptor TwistRTD =
                      RIDE_TYPE_FLAG_SINGLE_SESSION | RIDE_TYPE_FLAG_INTERESTING_TO_LOOK_AT | RIDE_TYPE_FLAG_LIST_VEHICLES_SEPARATELY),
     SET_FIELD(RideModes, EnumsToFlags(RideMode::Rotation)),
     SET_FIELD(DefaultMode, RideMode::Rotation),
-    SET_FIELD(OperatingSettings, { 3, 6, 0, 0, 0, 0 }),
+    SET_FIELD(OperatingSettings, { 3, 6, 0, 0, 0, 0, 12, 3 }),
     SET_FIELD(Naming, { STR_RIDE_NAME_TWIST, STR_RIDE_DESCRIPTION_TWIST }),
     SET_FIELD(NameConvention, { RideComponentType::Structure, RideComponentType::Structure, RideComponentType::Station }),
     SET_FIELD(EnumName, nameof(RIDE_TYPE_TWIST)),
@@ -40,7 +40,7 @@ constexpr const RideTypeDescriptor TwistRTD =
     SET_FIELD(RatingsCalculationFunction, ride_ratings_calculate_twist),
     SET_FIELD(RatingsMultipliers, { 40, 20, 10 }),
     SET_FIELD(UpkeepCosts, { 50, 1, 0, 0, 0, 0 }),
-    SET_FIELD(BuildCosts, { 90, 2, 1, }),
+    SET_FIELD(BuildCosts, { 45.00_GBP, 1.00_GBP, 1, }),
     SET_FIELD(DefaultPrices, { 10, 0 }),
     SET_FIELD(DefaultMusic, MUSIC_OBJECT_GENTLE),
     SET_FIELD(PhotoItem, ShopItem::Photo),
@@ -48,5 +48,6 @@ constexpr const RideTypeDescriptor TwistRTD =
     SET_FIELD(ColourPresets, DEFAULT_FLAT_RIDE_COLOUR_PRESET),
     SET_FIELD(ColourPreview, { 0, 0 }),
     SET_FIELD(ColourKey, RideColourKey::Ride),
+    SET_FIELD(Name, "twist"),
 };
 // clang-format on

@@ -13,6 +13,8 @@
 #include "IDrawingContext.h"
 #include "IDrawingEngine.h"
 
+#include <memory>
+
 namespace OpenRCT2
 {
     namespace Ui
@@ -76,9 +78,7 @@ namespace OpenRCT2
 
             rct_drawpixelinfo _bitsDPI = {};
 
-#ifdef __ENABLE_LIGHTFX__
             bool _lastLightFXenabled = false;
-#endif
 
             X8WeatherDrawer _weatherDrawer;
             X8DrawingContext* _drawingContext;
@@ -120,7 +120,6 @@ namespace OpenRCT2
 
         private:
             void ConfigureDirtyGrid();
-            static void ResetWindowVisbilities();
             void DrawAllDirtyBlocks();
             uint32_t GetNumDirtyRows(const uint32_t x, const uint32_t y, const uint32_t columns);
             void DrawDirtyBlocks(uint32_t x, uint32_t y, uint32_t columns, uint32_t rows);
@@ -136,8 +135,6 @@ namespace OpenRCT2
 
         public:
             explicit X8DrawingContext(X8DrawingEngine* engine);
-
-            IDrawingEngine* GetEngine() override;
 
             void Clear(rct_drawpixelinfo* dpi, uint8_t paletteIndex) override;
             void FillRect(rct_drawpixelinfo* dpi, uint32_t colour, int32_t x, int32_t y, int32_t w, int32_t h) override;

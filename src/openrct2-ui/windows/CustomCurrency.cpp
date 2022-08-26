@@ -18,7 +18,7 @@
 #include <openrct2/localisation/Localisation.h>
 #include <openrct2/util/Util.h>
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_CUSTOM_CURRENCY_WINDOW_TITLE;
+static constexpr const StringId WINDOW_TITLE = STR_CUSTOM_CURRENCY_WINDOW_TITLE;
 static constexpr const int32_t WH = 100;
 static constexpr const int32_t WW = 400;
 
@@ -52,16 +52,14 @@ public:
     void OnOpen() override
     {
         widgets = window_custom_currency_widgets;
-        enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_RATE) | (1ULL << WIDX_RATE_UP) | (1ULL << WIDX_RATE_DOWN)
-            | (1ULL << WIDX_SYMBOL_TEXT) | (1ULL << WIDX_AFFIX_DROPDOWN) | (1ULL << WIDX_AFFIX_DROPDOWN_BUTTON);
         hold_down_widgets = (1ULL << WIDX_RATE_UP) | (1ULL << WIDX_RATE_DOWN);
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
         colours[0] = COLOUR_LIGHT_BROWN;
         colours[1] = COLOUR_LIGHT_BROWN;
         colours[2] = COLOUR_LIGHT_BROWN;
     }
 
-    void OnMouseDown(rct_widgetindex widgetIndex) override
+    void OnMouseDown(WidgetIndex widgetIndex) override
     {
         auto* widget = &widgets[widgetIndex - 1];
 
@@ -86,11 +84,11 @@ public:
                 }
                 break;
             case WIDX_AFFIX_DROPDOWN_BUTTON:
-                gDropdownItemsFormat[0] = STR_DROPDOWN_MENU_LABEL;
-                gDropdownItemsArgs[0] = STR_PREFIX;
+                gDropdownItems[0].Format = STR_DROPDOWN_MENU_LABEL;
+                gDropdownItems[0].Args = STR_PREFIX;
 
-                gDropdownItemsFormat[1] = STR_DROPDOWN_MENU_LABEL;
-                gDropdownItemsArgs[1] = STR_SUFFIX;
+                gDropdownItems[1].Format = STR_DROPDOWN_MENU_LABEL;
+                gDropdownItems[1].Args = STR_SUFFIX;
 
                 WindowDropdownShowTextCustomWidth(
                     { windowPos.x + widget->left, windowPos.y + widget->top }, widget->height() + 1, colours[1], 0,
@@ -114,7 +112,7 @@ public:
         }
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -127,7 +125,7 @@ public:
         }
     }
 
-    void OnDropdown(rct_widgetindex widgetIndex, int32_t dropdownIndex) override
+    void OnDropdown(WidgetIndex widgetIndex, int32_t dropdownIndex) override
     {
         if (dropdownIndex == -1)
             return;
@@ -152,7 +150,7 @@ public:
         }
     }
 
-    void OnTextInput(rct_widgetindex widgetIndex, std::string_view text) override
+    void OnTextInput(WidgetIndex widgetIndex, std::string_view text) override
     {
         if (text.empty())
             return;
@@ -191,7 +189,7 @@ public:
     void OnDraw(rct_drawpixelinfo& dpi) override
     {
         auto ft = Formatter::Common();
-        ft.Add<money64>(MONEY(10, 0));
+        ft.Add<money64>(10.00_GBP);
 
         DrawWidgets(dpi);
 
@@ -218,7 +216,7 @@ public:
         auto drawPos = windowPos
             + ScreenCoordsXY{ window_custom_currency_widgets[WIDX_AFFIX_DROPDOWN].left + 1,
                               window_custom_currency_widgets[WIDX_AFFIX_DROPDOWN].top };
-        rct_string_id stringId = (CurrencyDescriptors[EnumValue(CurrencyType::Custom)].affix_unicode == CurrencyAffix::Prefix)
+        StringId stringId = (CurrencyDescriptors[EnumValue(CurrencyType::Custom)].affix_unicode == CurrencyAffix::Prefix)
             ? STR_PREFIX
             : STR_SUFFIX;
         DrawTextBasic(&dpi, drawPos, stringId, {}, { colours[1] });
@@ -227,5 +225,5 @@ public:
 
 rct_window* CustomCurrencyWindowOpen()
 {
-    return WindowFocusOrCreate<CustomCurrencyWindow>(WC_CUSTOM_CURRENCY_CONFIG, WW, WH, WF_CENTRE_SCREEN);
+    return WindowFocusOrCreate<CustomCurrencyWindow>(WindowClass::CustomCurrencyConfig, WW, WH, WF_CENTRE_SCREEN);
 }

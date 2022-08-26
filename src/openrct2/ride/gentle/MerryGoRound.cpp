@@ -44,7 +44,7 @@ static void PaintRiders(
         if (imageOffset >= 68)
             continue;
 
-        auto imageIndex = rideEntry.vehicles[0].base_image_id + 32 + imageOffset;
+        auto imageIndex = rideEntry.Cars[0].base_image_id + 32 + imageOffset;
         auto imageId = ImageId(imageIndex, vehicle.peep_tshirt_colours[peep], vehicle.peep_tshirt_colours[peep + 1]);
         PaintAddImageAsChild(session, imageId, offset, bbLength, bbOffset);
     }
@@ -53,7 +53,6 @@ static void PaintRiders(
 static void PaintCarousel(
     paint_session& session, const Ride& ride, uint8_t direction, int8_t xOffset, int8_t yOffset, uint16_t height)
 {
-    const TileElement* savedTileElement = static_cast<const TileElement*>(session.CurrentlyDrawnItem);
     height += 7;
 
     auto rideEntry = ride.GetRideEntry();
@@ -64,7 +63,7 @@ static void PaintCarousel(
     if (ride.lifecycle_flags & RIDE_LIFECYCLE_ON_TRACK && vehicle != nullptr)
     {
         session.InteractionType = ViewportInteractionItem::Entity;
-        session.CurrentlyDrawnItem = vehicle;
+        session.CurrentlyDrawnEntity = vehicle;
 
         if (ride.lifecycle_flags & (RIDE_LIFECYCLE_BREAKDOWN_PENDING | RIDE_LIFECYCLE_BROKEN_DOWN)
             && ride.breakdown_reason_pending == BREAKDOWN_CONTROL_FAILURE && ride.breakdown_sound_modifier >= 128)
@@ -91,12 +90,12 @@ static void PaintCarousel(
         imageTemplate = ImageId::FromUInt32(imageFlags);
     }
     auto imageOffset = rotationOffset & 0x1F;
-    auto imageId = imageTemplate.WithIndex(rideEntry->vehicles[0].base_image_id + imageOffset);
+    auto imageId = imageTemplate.WithIndex(rideEntry->Cars[0].base_image_id + imageOffset);
     PaintAddImageAsParent(session, imageId, offset, bbLength, bbOffset);
 
     PaintRiders(session, ride, *rideEntry, *vehicle, rotationOffset, offset, bbLength, bbOffset);
 
-    session.CurrentlyDrawnItem = savedTileElement;
+    session.CurrentlyDrawnEntity = nullptr;
     session.InteractionType = ViewportInteractionItem::Ride;
 }
 

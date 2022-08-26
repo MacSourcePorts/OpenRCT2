@@ -121,7 +121,7 @@ GameActions::Result TrackRemoveAction::Query() const
             STR_YOU_ARE_NOT_ALLOWED_TO_REMOVE_THIS_SECTION);
     }
 
-    ride_id_t rideIndex = tileElement->AsTrack()->GetRideIndex();
+    RideId rideIndex = tileElement->AsTrack()->GetRideIndex();
     const auto trackType = tileElement->AsTrack()->GetTrackType();
 
     auto ride = get_ride(rideIndex);
@@ -151,7 +151,7 @@ GameActions::Result TrackRemoveAction::Query() const
     res.Position.y = startLoc.y;
     res.Position.z = startLoc.z;
 
-    money32 cost = 0;
+    money64 supportCosts = 0;
 
     trackBlock = ted.Block;
     for (; trackBlock->index != 255; trackBlock++)
@@ -206,10 +206,11 @@ GameActions::Result TrackRemoveAction::Query() const
         int32_t entranceDirections = std::get<0>(ted.SequenceProperties);
         if (entranceDirections & TRACK_SEQUENCE_FLAG_ORIGIN && (tileElement->AsTrack()->GetSequenceIndex() == 0))
         {
-            if (!track_remove_station_element({ mapLoc, _origin.direction }, rideIndex, 0))
+            const auto removeElementResult = track_remove_station_element({ mapLoc, _origin.direction }, rideIndex, 0);
+            if (!removeElementResult.Successful)
             {
                 return GameActions::Result(
-                    GameActions::Status::Unknown, STR_RIDE_CONSTRUCTION_CANT_REMOVE_THIS, gGameCommandErrorText);
+                    GameActions::Status::Unknown, STR_RIDE_CONSTRUCTION_CANT_REMOVE_THIS, removeElementResult.Message);
             }
         }
 
@@ -226,19 +227,20 @@ GameActions::Result TrackRemoveAction::Query() const
             _support_height = 10;
         }
 
-        cost += (_support_height / 2) * ride->GetRideTypeDescriptor().BuildCosts.SupportPrice;
+        supportCosts += (_support_height / 2) * ride->GetRideTypeDescriptor().BuildCosts.SupportPrice;
     }
 
-    money32 price = ride->GetRideTypeDescriptor().BuildCosts.TrackPrice;
-    price *= ted.Price;
+    money64 price = ride->GetRideTypeDescriptor().BuildCosts.TrackPrice;
+    price *= ted.PriceModifier;
     price >>= 16;
-    price = (price + cost) / 2;
+    price = supportCosts + price;
     if (ride->lifecycle_flags & RIDE_LIFECYCLE_EVER_BEEN_OPENED)
-        price *= -7;
-    else
-        price *= -10;
+    {
+        // 70% modifier for opened rides
+        price = (price * 45875) / 65536;
+    }
 
-    res.Cost = price;
+    res.Cost = -price;
     return res;
 }
 
@@ -308,7 +310,7 @@ GameActions::Result TrackRemoveAction::Execute() const
         return GameActions::Result(GameActions::Status::InvalidParameters, STR_RIDE_CONSTRUCTION_CANT_REMOVE_THIS, STR_NONE);
     }
 
-    ride_id_t rideIndex = tileElement->AsTrack()->GetRideIndex();
+    RideId rideIndex = tileElement->AsTrack()->GetRideIndex();
     const auto trackType = tileElement->AsTrack()->GetTrackType();
     bool isLiftHill = tileElement->AsTrack()->HasChain();
 
@@ -332,7 +334,8 @@ GameActions::Result TrackRemoveAction::Execute() const
     res.Position.x = startLoc.x;
     res.Position.y = startLoc.y;
     res.Position.z = startLoc.z;
-    money32 cost = 0;
+
+    money64 supportCosts = 0;
 
     trackBlock = ted.Block;
     for (; trackBlock->index != 255; trackBlock++)
@@ -382,10 +385,11 @@ GameActions::Result TrackRemoveAction::Execute() const
         int32_t entranceDirections = std::get<0>(ted.SequenceProperties);
         if (entranceDirections & TRACK_SEQUENCE_FLAG_ORIGIN && (tileElement->AsTrack()->GetSequenceIndex() == 0))
         {
-            if (!track_remove_station_element({ mapLoc, _origin.direction }, rideIndex, 0))
+            const auto removeElementResult = track_remove_station_element({ mapLoc, _origin.direction }, rideIndex, 0);
+            if (!removeElementResult.Successful)
             {
                 return GameActions::Result(
-                    GameActions::Status::Unknown, STR_RIDE_CONSTRUCTION_CANT_REMOVE_THIS, gGameCommandErrorText);
+                    GameActions::Status::Unknown, STR_RIDE_CONSTRUCTION_CANT_REMOVE_THIS, removeElementResult.Message);
             }
         }
 
@@ -402,7 +406,7 @@ GameActions::Result TrackRemoveAction::Execute() const
             _support_height = 10;
         }
 
-        cost += (_support_height / 2) * ride->GetRideTypeDescriptor().BuildCosts.SupportPrice;
+        supportCosts += (_support_height / 2) * ride->GetRideTypeDescriptor().BuildCosts.SupportPrice;
 
         // If the removed tile is a station modify station properties.
         // Don't do this if the ride is simulating and the tile is a ghost to prevent desyncs.
@@ -410,10 +414,12 @@ GameActions::Result TrackRemoveAction::Execute() const
             && !(ride->status == RideStatus::Simulating && tileElement->Flags & TILE_ELEMENT_FLAG_GHOST)
             && (tileElement->AsTrack()->GetSequenceIndex() == 0))
         {
-            if (!track_remove_station_element({ mapLoc, _origin.direction }, rideIndex, GAME_COMMAND_FLAG_APPLY))
+            const auto removeElementResult = track_remove_station_element(
+                { mapLoc, _origin.direction }, rideIndex, GAME_COMMAND_FLAG_APPLY);
+            if (!removeElementResult.Successful)
             {
                 return GameActions::Result(
-                    GameActions::Status::Unknown, STR_RIDE_CONSTRUCTION_CANT_REMOVE_THIS, gGameCommandErrorText);
+                    GameActions::Status::Unknown, STR_RIDE_CONSTRUCTION_CANT_REMOVE_THIS, removeElementResult.Message);
             }
         }
 
@@ -479,15 +485,16 @@ GameActions::Result TrackRemoveAction::Execute() const
         }
     }
 
-    money32 price = ride->GetRideTypeDescriptor().BuildCosts.TrackPrice;
-    price *= ted.Price;
+    money64 price = ride->GetRideTypeDescriptor().BuildCosts.TrackPrice;
+    price *= ted.PriceModifier;
     price >>= 16;
-    price = (price + cost) / 2;
+    price = supportCosts + price;
     if (ride->lifecycle_flags & RIDE_LIFECYCLE_EVER_BEEN_OPENED)
-        price *= -7;
-    else
-        price *= -10;
+    {
+        // 70% modifier for opened rides
+        price = (price * 45875) / 65536;
+    }
 
-    res.Cost = price;
+    res.Cost = -price;
     return res;
 }

@@ -73,14 +73,9 @@ enum
 
 namespace PaintSessionFlags
 {
-    // Unsure as to why this exists and DidPassSurface
-    constexpr uint8_t IsPassedSurface = 1;
-    constexpr uint8_t IsTrackPiecePreview = 2;
+    constexpr uint8_t PassedSurface = 1u << 0;
+    constexpr uint8_t IsTrackPiecePreview = 1u << 1;
 } // namespace PaintSessionFlags
-
-#ifdef __TESTPAINT__
-extern uint16_t testPaintVerticalTunnelHeight;
-#endif
 
 extern const int32_t SEGMENTS_ALL;
 extern const uint16_t segment_offsets[9];

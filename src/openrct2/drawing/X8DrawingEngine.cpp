@@ -122,10 +122,8 @@ X8DrawingEngine::X8DrawingEngine([[maybe_unused]] const std::shared_ptr<Ui::IUiC
 {
     _drawingContext = new X8DrawingContext(this);
     _bitsDPI.DrawingEngine = this;
-#ifdef __ENABLE_LIGHTFX__
     lightfx_set_available(true);
     _lastLightFXenabled = (gConfigGeneral.enable_light_fx != 0);
-#endif
 }
 
 X8DrawingEngine::~X8DrawingEngine()
@@ -190,13 +188,11 @@ void X8DrawingEngine::BeginDraw()
 {
     if (gIntroState == IntroState::None)
     {
-#ifdef __ENABLE_LIGHTFX__
         // HACK we need to re-configure the bits if light fx has been enabled / disabled
         if (_lastLightFXenabled != (gConfigGeneral.enable_light_fx != 0))
         {
             Resize(_width, _height);
         }
-#endif
         _weatherDrawer.Restore(&_bitsDPI);
     }
 }
@@ -342,12 +338,10 @@ void X8DrawingEngine::ConfigureBits(uint32_t width, uint32_t height, uint32_t pi
 
     ConfigureDirtyGrid();
 
-#ifdef __ENABLE_LIGHTFX__
     if (lightfx_is_available())
     {
         lightfx_update_buffers(dpi);
     }
-#endif
 }
 
 void X8DrawingEngine::OnDrawDirtyBlock(
@@ -455,15 +449,10 @@ X8DrawingContext::X8DrawingContext(X8DrawingEngine* engine)
     _engine = engine;
 }
 
-IDrawingEngine* X8DrawingContext::GetEngine()
-{
-    return _engine;
-}
-
 void X8DrawingContext::Clear(rct_drawpixelinfo* dpi, uint8_t paletteIndex)
 {
-    int32_t w = dpi->width / dpi->zoom_level;
-    int32_t h = dpi->height / dpi->zoom_level;
+    int32_t w = dpi->zoom_level.ApplyInversedTo(dpi->width);
+    int32_t h = dpi->zoom_level.ApplyInversedTo(dpi->height);
     uint8_t* ptr = dpi->bits;
 
     for (int32_t y = 0; y < h; y++)
@@ -689,18 +678,19 @@ void X8DrawingContext::FilterRect(
     // Location in screen buffer?
     uint8_t* dst = dpi->bits
         + static_cast<uint32_t>(
-                       (startY / dpi->zoom_level) * ((dpi->width / dpi->zoom_level) + dpi->pitch) + (startX / dpi->zoom_level));
+                       dpi->zoom_level.ApplyInversedTo(startY) * (dpi->zoom_level.ApplyInversedTo(dpi->width) + dpi->pitch)
+                       + dpi->zoom_level.ApplyInversedTo(startX));
 
     // Find colour in colour table?
     auto paletteMap = GetPaletteMapForColour(EnumValue(palette));
     if (paletteMap.has_value())
     {
         const auto& paletteEntries = paletteMap.value();
-        const int32_t scaled_width = width / dpi->zoom_level;
-        const int32_t step = ((dpi->width / dpi->zoom_level) + dpi->pitch);
+        const int32_t scaled_width = dpi->zoom_level.ApplyInversedTo(width);
+        const int32_t step = dpi->zoom_level.ApplyInversedTo(dpi->width) + dpi->pitch;
 
         // Fill the rectangle with the colours from the colour table
-        auto c = height / dpi->zoom_level;
+        auto c = dpi->zoom_level.ApplyInversedTo(height);
         for (int32_t i = 0; i < c; i++)
         {
             uint8_t* nextdst = dst + step * i;

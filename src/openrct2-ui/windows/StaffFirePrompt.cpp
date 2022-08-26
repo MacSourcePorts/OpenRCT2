@@ -18,7 +18,7 @@
 #include <openrct2/localisation/Formatter.h>
 #include <openrct2/localisation/Localisation.h>
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_SACK_STAFF;
+static constexpr const StringId WINDOW_TITLE = STR_SACK_STAFF;
 static constexpr const int32_t WW = 200;
 static constexpr const int32_t WH = 100;
 
@@ -39,7 +39,7 @@ static rct_widget window_staff_fire_widgets[] = {
     WIDGETS_END,
 };
 
-static void WindowStaffFireMouseup(rct_window *w, rct_widgetindex widgetIndex);
+static void WindowStaffFireMouseup(rct_window *w, WidgetIndex widgetIndex);
 static void WindowStaffFirePaint(rct_window *w, rct_drawpixelinfo *dpi);
 
 //0x9A3F7C
@@ -56,19 +56,18 @@ rct_window* WindowStaffFirePromptOpen(Peep* peep)
     rct_window* w;
 
     // Check if the confirm window already exists.
-    w = window_bring_to_front_by_number(WC_FIRE_PROMPT, peep->sprite_index);
+    w = window_bring_to_front_by_number(WindowClass::FirePrompt, peep->sprite_index.ToUnderlying());
     if (w != nullptr)
     {
         return w;
     }
 
-    w = WindowCreateCentred(WW, WH, &window_staff_fire_events, WC_FIRE_PROMPT, WF_TRANSPARENT);
+    w = WindowCreateCentred(WW, WH, &window_staff_fire_events, WindowClass::FirePrompt, WF_TRANSPARENT);
     w->widgets = window_staff_fire_widgets;
-    w->enabled_widgets |= (1ULL << WIDX_CLOSE) | (1ULL << WIDX_YES) | (1ULL << WIDX_CANCEL);
 
-    WindowInitScrollWidgets(w);
+    WindowInitScrollWidgets(*w);
 
-    w->number = peep->sprite_index;
+    w->number = peep->sprite_index.ToUnderlying();
 
     return w;
 }
@@ -77,19 +76,19 @@ rct_window* WindowStaffFirePromptOpen(Peep* peep)
  *
  *  rct2: 0x006C0B40
  */
-static void WindowStaffFireMouseup(rct_window* w, rct_widgetindex widgetIndex)
+static void WindowStaffFireMouseup(rct_window* w, WidgetIndex widgetIndex)
 {
     switch (widgetIndex)
     {
         case WIDX_YES:
         {
-            auto staffFireAction = StaffFireAction(w->number);
+            auto staffFireAction = StaffFireAction(EntityId::FromUnderlying(w->number));
             GameActions::Execute(&staffFireAction);
             break;
         }
         case WIDX_CANCEL:
         case WIDX_CLOSE:
-            window_close(w);
+            window_close(*w);
     }
 }
 
@@ -99,9 +98,9 @@ static void WindowStaffFireMouseup(rct_window* w, rct_widgetindex widgetIndex)
  */
 static void WindowStaffFirePaint(rct_window* w, rct_drawpixelinfo* dpi)
 {
-    WindowDrawWidgets(w, dpi);
+    WindowDrawWidgets(*w, dpi);
 
-    Peep* peep = GetEntity<Staff>(w->number);
+    Peep* peep = GetEntity<Staff>(EntityId::FromUnderlying(w->number));
     auto ft = Formatter();
     peep->FormatNameTo(ft);
 

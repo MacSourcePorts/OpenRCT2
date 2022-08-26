@@ -26,7 +26,7 @@
 #include "../localisation/StringIds.h"
 #include "../network/network.h"
 #include "../paint/VirtualFloor.h"
-#include "../platform/Platform2.h"
+#include "../platform/Platform.h"
 #include "../rct1/Limits.h"
 #include "../scenario/Scenario.h"
 #include "../ui/UiContext.h"
@@ -153,7 +153,7 @@ namespace Config
             model->fullscreen_mode = reader->GetInt32("fullscreen_mode", 0);
             model->fullscreen_height = reader->GetInt32("fullscreen_height", -1);
             model->fullscreen_width = reader->GetInt32("fullscreen_width", -1);
-            model->rct1_path = reader->GetCString("rct1_path", nullptr);
+            model->rct1_path = reader->GetString("rct1_path", "");
             model->rct2_path = reader->GetString("game_path", "");
             model->landscape_smoothing = reader->GetBoolean("landscape_smoothing", true);
             model->language = reader->GetEnum<int32_t>("language", Platform::GetLocaleLanguage(), Enum_LanguageEnum);
@@ -179,7 +179,7 @@ namespace Config
             model->auto_staff_placement = reader->GetBoolean("auto_staff", true);
             model->handymen_mow_default = reader->GetBoolean("handymen_mow_default", false);
             model->default_inspection_interval = reader->GetInt32("default_inspection_interval", 2);
-            model->last_run_version = reader->GetCString("last_run_version", nullptr);
+            model->last_run_version = reader->GetString("last_run_version", "");
             model->invert_viewport_drag = reader->GetBoolean("invert_viewport_drag", false);
             model->load_save_sort = reader->GetEnum<Sort>("load_save_sort", Sort::NameAscending, Enum_Sort);
             model->minimize_fullscreen_focus_loss = reader->GetBoolean("minimize_fullscreen_focus_loss", true);
@@ -202,10 +202,10 @@ namespace Config
             model->scenario_select_mode = reader->GetInt32("scenario_select_mode", SCENARIO_SELECT_MODE_ORIGIN);
             model->scenario_unlocking_enabled = reader->GetBoolean("scenario_unlocking_enabled", true);
             model->scenario_hide_mega_park = reader->GetBoolean("scenario_hide_mega_park", true);
-            model->last_save_game_directory = reader->GetCString("last_game_directory", nullptr);
-            model->last_save_landscape_directory = reader->GetCString("last_landscape_directory", nullptr);
-            model->last_save_scenario_directory = reader->GetCString("last_scenario_directory", nullptr);
-            model->last_save_track_directory = reader->GetCString("last_track_directory", nullptr);
+            model->last_save_game_directory = reader->GetString("last_game_directory", "");
+            model->last_save_landscape_directory = reader->GetString("last_landscape_directory", "");
+            model->last_save_scenario_directory = reader->GetString("last_scenario_directory", "");
+            model->last_save_track_directory = reader->GetString("last_track_directory", "");
             model->use_native_browse_dialog = reader->GetBoolean("use_native_browse_dialog", false);
             model->window_limit = reader->GetInt32("window_limit", WINDOW_LIMIT_MAX);
             model->zoom_to_cursor = reader->GetBoolean("zoom_to_cursor", true);
@@ -216,6 +216,14 @@ namespace Config
             model->allow_early_completion = reader->GetBoolean("allow_early_completion", false);
             model->transparent_screenshot = reader->GetBoolean("transparent_screenshot", true);
             model->transparent_water = reader->GetBoolean("transparent_water", true);
+
+            model->invisible_rides = reader->GetBoolean("invisible_rides", false);
+            model->invisible_vehicles = reader->GetBoolean("invisible_vehicles", false);
+            model->invisible_trees = reader->GetBoolean("invisible_trees", false);
+            model->invisible_scenery = reader->GetBoolean("invisible_scenery", false);
+            model->invisible_paths = reader->GetBoolean("invisible_paths", false);
+            model->invisible_supports = reader->GetBoolean("invisible_supports", true);
+
             model->last_version_check_time = reader->GetInt64("last_version_check_time", 0);
         }
     }
@@ -293,6 +301,12 @@ namespace Config
         writer->WriteEnum<VirtualFloorStyles>("virtual_floor_style", model->virtual_floor_style, Enum_VirtualFloorStyle);
         writer->WriteBoolean("transparent_screenshot", model->transparent_screenshot);
         writer->WriteBoolean("transparent_water", model->transparent_water);
+        writer->WriteBoolean("invisible_rides", model->invisible_rides);
+        writer->WriteBoolean("invisible_vehicles", model->invisible_vehicles);
+        writer->WriteBoolean("invisible_trees", model->invisible_trees);
+        writer->WriteBoolean("invisible_scenery", model->invisible_scenery);
+        writer->WriteBoolean("invisible_paths", model->invisible_paths);
+        writer->WriteBoolean("invisible_supports", model->invisible_supports);
         writer->WriteInt64("last_version_check_time", model->last_version_check_time);
     }
 
@@ -314,6 +328,7 @@ namespace Config
             model->random_title_sequence = reader->GetBoolean("random_title_sequence", false);
             model->object_selection_filter_flags = reader->GetInt32("object_selection_filter_flags", 0x3FFF);
             model->scenarioselect_last_tab = reader->GetInt32("scenarioselect_last_tab", 0);
+            model->list_ride_vehicles_separately = reader->GetBoolean("list_ride_vehicles_separately", false);
         }
     }
 
@@ -334,6 +349,7 @@ namespace Config
         writer->WriteBoolean("random_title_sequence", model->random_title_sequence);
         writer->WriteInt32("object_selection_filter_flags", model->object_selection_filter_flags);
         writer->WriteInt32("scenarioselect_last_tab", model->scenarioselect_last_tab);
+        writer->WriteBoolean("list_ride_vehicles_separately", model->list_ride_vehicles_separately);
     }
 
     static void ReadSound(IIniReader* reader)
@@ -341,10 +357,10 @@ namespace Config
         if (reader->ReadSection("sound"))
         {
             auto model = &gConfigSound;
-            model->device = reader->GetCString("audio_device", nullptr);
+            model->device = reader->GetString("audio_device", "");
             model->master_sound_enabled = reader->GetBoolean("master_sound", true);
             model->master_volume = reader->GetInt32("master_volume", 100);
-            model->title_music = reader->GetInt32("title_music", 2);
+            model->title_music = static_cast<TitleMusicKind>(reader->GetInt32("title_music", EnumValue(TitleMusicKind::Rct2)));
             model->sound_enabled = reader->GetBoolean("sound", true);
             model->sound_volume = reader->GetInt32("sound_volume", 100);
             model->ride_music_enabled = reader->GetBoolean("ride_music", true);
@@ -360,7 +376,7 @@ namespace Config
         writer->WriteString("audio_device", model->device);
         writer->WriteBoolean("master_sound", model->master_sound_enabled);
         writer->WriteInt32("master_volume", model->master_volume);
-        writer->WriteInt32("title_music", model->title_music);
+        writer->WriteInt32("title_music", EnumValue(model->title_music));
         writer->WriteBoolean("sound", model->sound_enabled);
         writer->WriteInt32("sound_volume", model->sound_volume);
         writer->WriteBoolean("ride_music", model->ride_music_enabled);
@@ -389,7 +405,7 @@ namespace Config
             playerName = String::Trim(playerName);
 
             auto model = &gConfigNetwork;
-            model->player_name = playerName;
+            model->player_name = std::move(playerName);
             model->default_port = reader->GetInt32("default_port", NETWORK_DEFAULT_PORT);
             model->listen_address = reader->GetString("listen_address", "");
             model->default_password = reader->GetString("default_password", "");
@@ -644,7 +660,7 @@ namespace Config
         auto steamPath = Platform::GetSteamPath();
         if (!steamPath.empty())
         {
-            std::string location = Path::Combine(steamPath, platform_get_rct1_steam_dir());
+            std::string location = Path::Combine(steamPath, Platform::GetRCT1SteamDir());
             if (RCT1DataPresentAtLocation(location))
             {
                 return location;
@@ -693,7 +709,7 @@ namespace Config
         auto steamPath = Platform::GetSteamPath();
         if (!steamPath.empty())
         {
-            std::string location = Path::Combine(steamPath, platform_get_rct2_steam_dir());
+            std::string location = Path::Combine(steamPath, Platform::GetRCT2SteamDir());
             if (Platform::OriginalGameDataExists(location))
             {
                 return location;
@@ -723,12 +739,12 @@ namespace Config
         desc.Filters.emplace_back(language_get_string(STR_ALL_FILES), "*");
 
         const auto userHomePath = Platform::GetFolderPath(SPECIAL_FOLDER::USER_HOME);
-        desc.InitialDirectory = userHomePath.c_str();
+        desc.InitialDirectory = userHomePath;
 
-        return platform_open_common_file_dialog(installerPath, desc, 4096);
+        return ContextOpenCommonFileDialog(installerPath, desc, 4096);
     }
 
-    static bool ExtractGogInstaller(u8string_view installerPath, u8string_view targetPath)
+    static bool ExtractGogInstaller(const u8string& installerPath, const u8string& targetPath)
     {
         std::string path;
         std::string output;
@@ -739,7 +755,9 @@ namespace Config
             return false;
         }
         int32_t exit_status = Platform::Execute(
-            String::Format("%s '%s' --exclude-temp --output-dir '%s'", path.c_str(), installerPath, targetPath), &output);
+            String::StdFormat(
+                "%s '%s' --exclude-temp --output-dir '%s'", path.c_str(), installerPath.c_str(), targetPath.c_str()),
+            &output);
         log_info("Exit status %d", exit_status);
         return exit_status == 0;
     }
@@ -782,16 +800,9 @@ bool config_save(u8string_view path)
 
 void config_release()
 {
-    SafeFree(gConfigGeneral.rct1_path);
     SafeFree(gConfigGeneral.custom_currency_symbol);
-    SafeFree(gConfigGeneral.last_save_game_directory);
-    SafeFree(gConfigGeneral.last_save_landscape_directory);
-    SafeFree(gConfigGeneral.last_save_scenario_directory);
-    SafeFree(gConfigGeneral.last_save_track_directory);
-    SafeFree(gConfigGeneral.last_run_version);
     SafeFree(gConfigInterface.current_theme_preset);
     SafeFree(gConfigInterface.current_title_sequence_preset);
-    SafeFree(gConfigSound.device);
     SafeFree(gConfigFonts.file_name);
     SafeFree(gConfigFonts.font_name);
 }
@@ -799,7 +810,7 @@ void config_release()
 u8string config_get_default_path()
 {
     auto env = GetContext()->GetPlatformEnvironment();
-    return Path::Combine(env->GetDirectoryPath(DIRBASE::USER), "config.ini");
+    return Path::Combine(env->GetDirectoryPath(DIRBASE::USER), u8"config.ini");
 }
 
 bool config_save_default()
@@ -898,7 +909,7 @@ bool config_find_or_browse_install_directory()
                         uiContext->ShowMessageBox(language_get_string(STR_NOT_THE_GOG_INSTALLER));
                     }
 
-                    installPath = Path::Combine(dest, "app");
+                    installPath = Path::Combine(dest, u8"app");
                 }
                 if (installPath.empty())
                 {
@@ -924,8 +935,7 @@ bool config_find_or_browse_install_directory()
     std::string rct1Path = Config::FindRCT1Path();
     if (!rct1Path.empty())
     {
-        free(gConfigGeneral.rct1_path);
-        gConfigGeneral.rct1_path = String::Duplicate(rct1Path);
+        gConfigGeneral.rct1_path = std::move(rct1Path);
     }
 
     return true;
@@ -933,8 +943,8 @@ bool config_find_or_browse_install_directory()
 
 std::string FindCsg1datAtLocation(u8string_view path)
 {
-    auto checkPath1 = Path::Combine(path, "Data", "CSG1.DAT");
-    auto checkPath2 = Path::Combine(path, "Data", "CSG1.1");
+    auto checkPath1 = Path::Combine(path, u8"Data", u8"CSG1.DAT");
+    auto checkPath2 = Path::Combine(path, u8"Data", u8"CSG1.1");
 
     // Since Linux is case sensitive (and macOS sometimes too), make sure we handle case properly.
     std::string path1result = Path::ResolveCasing(checkPath1);
@@ -955,12 +965,12 @@ bool Csg1datPresentAtLocation(u8string_view path)
 
 u8string FindCsg1idatAtLocation(u8string_view path)
 {
-    auto result1 = Path::ResolveCasing(Path::Combine(path, "Data", "CSG1I.DAT"));
+    auto result1 = Path::ResolveCasing(Path::Combine(path, u8"Data", u8"CSG1I.DAT"));
     if (!result1.empty())
     {
         return result1;
     }
-    auto result2 = Path::ResolveCasing(Path::Combine(path, "RCTdeluxe_install", "Data", "CSG1I.DAT"));
+    auto result2 = Path::ResolveCasing(Path::Combine(path, u8"RCTdeluxe_install", u8"Data", u8"CSG1I.DAT"));
     return result2;
 }
 

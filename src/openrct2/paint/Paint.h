@@ -19,6 +19,7 @@
 #include <mutex>
 #include <thread>
 
+struct EntityBase;
 struct TileElement;
 enum class RailingEntrySupportType : uint8_t;
 enum class ViewportInteractionItem : uint8_t;
@@ -27,10 +28,10 @@ struct attached_paint_struct
 {
     attached_paint_struct* next;
     ImageId image_id;
-    ImageId colour_image_id;
+    ImageId ColourImageId;
     int32_t x;
     int32_t y;
-    uint8_t flags;
+    bool IsMasked;
 };
 
 struct paint_struct_bound_box
@@ -50,21 +51,20 @@ struct paint_struct
     paint_struct* children;
     paint_struct* next_quadrant_ps;
     TileElement* tileElement;
+    EntityBase* entity;
     ImageId image_id;
-    ImageId colour_image_id;
     int32_t x;
     int32_t y;
     int32_t map_x;
     int32_t map_y;
     uint16_t quadrant_index;
-    uint8_t flags;
     uint8_t SortFlags;
     ViewportInteractionItem sprite_type;
 };
 
 struct paint_string_struct
 {
-    rct_string_id string_id;
+    StringId string_id;
     paint_string_struct* next;
     int32_t x;
     int32_t y;
@@ -107,11 +107,6 @@ struct sprite_bb
     CoordsXYZ offset;
     CoordsXYZ bb_offset;
     CoordsXYZ bb_size;
-};
-
-enum PAINT_STRUCT_FLAGS
-{
-    PAINT_STRUCT_FLAG_IS_MASKED = (1 << 0)
 };
 
 struct support_height
@@ -185,35 +180,35 @@ public:
 
 struct PaintSessionCore
 {
+    paint_struct PaintHead;
     paint_struct* Quadrants[MaxPaintQuadrants];
     paint_struct* LastPS;
     paint_string_struct* PSStringHead;
     paint_string_struct* LastPSString;
     attached_paint_struct* LastAttachedPS;
     const TileElement* SurfaceElement;
-    const void* CurrentlyDrawnItem;
+    EntityBase* CurrentlyDrawnEntity;
+    TileElement* CurrentlyDrawnTileElement;
     const TileElement* PathElementOnSameHeight;
     const TileElement* TrackElementOnSameHeight;
-    paint_struct PaintHead;
+    paint_struct* WoodenSupportsPrependTo;
+    CoordsXY SpritePosition;
+    CoordsXY MapPosition;
     uint32_t ViewFlags;
     uint32_t QuadrantBackIndex;
     uint32_t QuadrantFrontIndex;
-    CoordsXY SpritePosition;
-    ViewportInteractionItem InteractionType;
-    uint8_t CurrentRotation;
+    uint32_t TrackColours[4];
     support_height SupportSegments[9];
     support_height Support;
-    paint_struct* WoodenSupportsPrependTo;
-    CoordsXY MapPosition;
+    uint16_t WaterHeight;
     tunnel_entry LeftTunnels[TUNNEL_MAX_COUNT];
-    uint8_t LeftTunnelCount;
     tunnel_entry RightTunnels[TUNNEL_MAX_COUNT];
+    uint8_t LeftTunnelCount;
     uint8_t RightTunnelCount;
     uint8_t VerticalTunnelHeight;
-    bool DidPassSurface;
-    uint8_t Unk141E9DB;
-    uint16_t WaterHeight;
-    uint32_t TrackColours[4];
+    uint8_t CurrentRotation;
+    uint8_t Flags;
+    ViewportInteractionItem InteractionType;
 };
 
 struct paint_session : public PaintSessionCore
@@ -310,27 +305,12 @@ paint_struct* PaintAddImageAsParent(
     paint_session& session, ImageId image_id, const CoordsXYZ& offset, const CoordsXYZ& boundBoxSize,
     const CoordsXYZ& boundBoxOffset);
 paint_struct* PaintAddImageAsChild(
-    paint_session& session, uint32_t image_id, int32_t x_offset, int32_t y_offset, int32_t bound_box_length_x,
-    int32_t bound_box_length_y, int32_t bound_box_length_z, int32_t z_offset, int32_t bound_box_offset_x,
-    int32_t bound_box_offset_y, int32_t bound_box_offset_z);
-paint_struct* PaintAddImageAsChild(
     paint_session& session, uint32_t image_id, const CoordsXYZ& offset, const CoordsXYZ& boundBoxLength,
     const CoordsXYZ& boundBoxOffset);
 paint_struct* PaintAddImageAsChild(
     paint_session& session, ImageId image_id, const CoordsXYZ& offset, const CoordsXYZ& boundBoxLength,
     const CoordsXYZ& boundBoxOffset);
 
-paint_struct* PaintAddImageAsParentRotated(
-    paint_session& session, uint8_t direction, uint32_t image_id, int32_t x_offset, int32_t y_offset,
-    int32_t bound_box_length_x, int32_t bound_box_length_y, int32_t bound_box_length_z, int32_t z_offset);
-paint_struct* PaintAddImageAsParentRotated(
-    paint_session& session, uint8_t direction, uint32_t image_id, int32_t x_offset, int32_t y_offset,
-    int32_t bound_box_length_x, int32_t bound_box_length_y, int32_t bound_box_length_z, int32_t z_offset,
-    int32_t bound_box_offset_x, int32_t bound_box_offset_y, int32_t bound_box_offset_z);
-paint_struct* PaintAddImageAsChildRotated(
-    paint_session& session, uint8_t direction, uint32_t image_id, int32_t x_offset, int32_t y_offset,
-    int32_t bound_box_length_x, int32_t bound_box_length_y, int32_t bound_box_length_z, int32_t z_offset,
-    int32_t bound_box_offset_x, int32_t bound_box_offset_y, int32_t bound_box_offset_z);
 paint_struct* PaintAddImageAsChildRotated(
     paint_session& session, const uint8_t direction, const uint32_t image_id, const CoordsXYZ& offset,
     const CoordsXYZ& boundBoxSize, const CoordsXYZ& boundBoxOffset);
@@ -347,7 +327,7 @@ bool PaintAttachToPreviousAttach(paint_session& session, ImageId imageId, int32_
 bool PaintAttachToPreviousPS(paint_session& session, ImageId image_id, int32_t x, int32_t y);
 bool PaintAttachToPreviousPS(paint_session& session, uint32_t image_id, int32_t x, int32_t y);
 void PaintFloatingMoneyEffect(
-    paint_session& session, money64 amount, rct_string_id string_id, int32_t y, int32_t z, int8_t y_offsets[], int32_t offset_x,
+    paint_session& session, money64 amount, StringId string_id, int32_t y, int32_t z, int8_t y_offsets[], int32_t offset_x,
     uint32_t rotation);
 
 paint_session* PaintSessionAlloc(rct_drawpixelinfo* dpi, uint32_t viewFlags);
@@ -356,17 +336,3 @@ void PaintSessionGenerate(paint_session& session);
 void PaintSessionArrange(PaintSessionCore& session);
 void PaintDrawStructs(paint_session& session);
 void PaintDrawMoneyStructs(rct_drawpixelinfo* dpi, paint_string_struct* ps);
-
-// TESTING
-#ifdef __TESTPAINT__
-void testpaint_clear_ignore();
-void testpaint_ignore(uint8_t direction, uint8_t trackSequence);
-void testpaint_ignore_all();
-bool testpaint_is_ignored(uint8_t direction, uint8_t trackSequence);
-
-#    define TESTPAINT_IGNORE(direction, trackSequence) testpaint_ignore(direction, trackSequence)
-#    define TESTPAINT_IGNORE_ALL() testpaint_ignore_all()
-#else
-#    define TESTPAINT_IGNORE(direction, trackSequence)
-#    define TESTPAINT_IGNORE_ALL()
-#endif

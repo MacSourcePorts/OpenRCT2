@@ -8,6 +8,7 @@
  *****************************************************************************/
 
 #include <algorithm>
+#include <memory>
 #include <openrct2-ui/interface/Widget.h>
 #include <openrct2-ui/windows/Window.h>
 #include <openrct2/Context.h>
@@ -18,7 +19,7 @@
 #include <openrct2/localisation/Formatter.h>
 #include <openrct2/localisation/Localisation.h>
 #include <openrct2/object/ObjectManager.h>
-#include <openrct2/platform/Platform2.h>
+#include <openrct2/platform/Platform.h>
 #include <openrct2/ride/RideConstruction.h>
 #include <openrct2/ride/RideData.h>
 #include <openrct2/ride/TrackDesign.h>
@@ -40,7 +41,7 @@ enum {
     WIDX_CANCEL
 };
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_TRACK_DESIGN_INSTALL_WINDOW_TITLE;
+static constexpr const StringId WINDOW_TITLE = STR_TRACK_DESIGN_INSTALL_WINDOW_TITLE;
 static constexpr const int32_t WW = 380;
 static constexpr const int32_t WH = 460;
 constexpr int32_t PREVIEW_BUTTONS_LEFT = WW - 25;
@@ -57,10 +58,10 @@ static rct_widget window_install_track_widgets[] = {
 };
 
 static void WindowInstallTrackClose(rct_window *w);
-static void WindowInstallTrackMouseup(rct_window *w, rct_widgetindex widgetIndex);
+static void WindowInstallTrackMouseup(rct_window *w, WidgetIndex widgetIndex);
 static void WindowInstallTrackInvalidate(rct_window *w);
 static void WindowInstallTrackPaint(rct_window *w, rct_drawpixelinfo *dpi);
-static void WindowInstallTrackTextInput(rct_window *w, rct_widgetindex widgetIndex, char *text);
+static void WindowInstallTrackTextInput(rct_window *w, WidgetIndex widgetIndex, char *text);
 
 static rct_window_event_list window_install_track_events([](auto& events)
 {
@@ -105,7 +106,7 @@ rct_window* WindowInstallTrackOpen(const utf8* path)
         return nullptr;
     }
 
-    window_close_by_class(WC_EDITOR_OBJECT_SELECTION);
+    window_close_by_class(WindowClass::EditorObjectSelection);
     window_close_construction_windows();
 
     gTrackDesignSceneryToggle = false;
@@ -116,13 +117,11 @@ rct_window* WindowInstallTrackOpen(const utf8* path)
     int32_t x = screenWidth / 2 - 201;
     int32_t y = std::max(TOP_TOOLBAR_HEIGHT + 1, screenHeight / 2 - 200);
 
-    rct_window* w = WindowCreate(ScreenCoordsXY(x, y), WW, WH, &window_install_track_events, WC_INSTALL_TRACK, 0);
+    rct_window* w = WindowCreate(ScreenCoordsXY(x, y), WW, WH, &window_install_track_events, WindowClass::InstallTrack, 0);
     w->widgets = window_install_track_widgets;
-    w->enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_ROTATE) | (1ULL << WIDX_TOGGLE_SCENERY) | (1ULL << WIDX_INSTALL)
-        | (1ULL << WIDX_CANCEL);
-    WindowInitScrollWidgets(w);
+    WindowInitScrollWidgets(*w);
     w->track_list.track_list_being_updated = false;
-    window_push_others_right(w);
+    window_push_others_right(*w);
 
     _trackPath = path;
     _trackName = GetNameFromTrackPath(path);
@@ -151,13 +150,13 @@ static void WindowInstallTrackClose(rct_window* w)
  *
  *  rct2: 0x006D407A
  */
-static void WindowInstallTrackMouseup(rct_window* w, rct_widgetindex widgetIndex)
+static void WindowInstallTrackMouseup(rct_window* w, WidgetIndex widgetIndex)
 {
     switch (widgetIndex)
     {
         case WIDX_CLOSE:
         case WIDX_CANCEL:
-            window_close(w);
+            window_close(*w);
             break;
         case WIDX_ROTATE:
             _currentTrackPieceDirection++;
@@ -198,7 +197,7 @@ static void WindowInstallTrackInvalidate(rct_window* w)
  */
 static void WindowInstallTrackPaint(rct_window* w, rct_drawpixelinfo* dpi)
 {
-    WindowDrawWidgets(w, dpi);
+    WindowDrawWidgets(*w, dpi);
 
     // Track preview
     rct_widget* widget = &window_install_track_widgets[WIDX_TRACK_PREVIEW];
@@ -210,7 +209,7 @@ static void WindowInstallTrackPaint(rct_window* w, rct_drawpixelinfo* dpi)
     g1temp.offset = _trackDesignPreviewPixels.data() + (_currentTrackPieceDirection * TRACK_PREVIEW_IMAGE_SIZE);
     g1temp.width = 370;
     g1temp.height = 217;
-    g1temp.flags = G1_FLAG_BMP;
+    g1temp.flags = G1_FLAG_HAS_TRANSPARENCY;
     gfx_set_g1_element(SPR_TEMP, &g1temp);
     drawing_engine_invalidate_image(SPR_TEMP);
     gfx_draw_sprite(dpi, ImageId(SPR_TEMP), screenPos);
@@ -252,12 +251,12 @@ static void WindowInstallTrackPaint(rct_window* w, rct_drawpixelinfo* dpi)
         {
             auto groupIndex = object_manager_get_loaded_object_entry_index(objectEntry);
             auto rideName = get_ride_naming(td6->type, get_ride_entry(groupIndex));
-            ft.Add<rct_string_id>(rideName.Name);
+            ft.Add<StringId>(rideName.Name);
         }
         else
         {
             // Fall back on the technical track name if the vehicle object cannot be loaded
-            ft.Add<rct_string_id>(GetRideTypeDescriptor(td6->type).Naming.Name);
+            ft.Add<StringId>(GetRideTypeDescriptor(td6->type).Naming.Name);
         }
 
         DrawTextBasic(dpi, screenPos, STR_TRACK_DESIGN_TYPE, ft);
@@ -320,7 +319,7 @@ static void WindowInstallTrackPaint(rct_window* w, rct_drawpixelinfo* dpi)
 
         // Ride length
         auto ft = Formatter();
-        ft.Add<rct_string_id>(STR_RIDE_LENGTH_ENTRY);
+        ft.Add<StringId>(STR_RIDE_LENGTH_ENTRY);
         ft.Add<uint16_t>(td6->ride_length);
         DrawTextEllipsised(dpi, screenPos, 214, STR_TRACK_LIST_RIDE_LENGTH, ft);
         screenPos.y += LIST_ROW_HEIGHT;
@@ -413,7 +412,7 @@ static void WindowInstallTrackPaint(rct_window* w, rct_drawpixelinfo* dpi)
  *
  *  rct2: 0x006D40A7
  */
-static void WindowInstallTrackTextInput(rct_window* w, rct_widgetindex widgetIndex, char* text)
+static void WindowInstallTrackTextInput(rct_window* w, WidgetIndex widgetIndex, char* text)
 {
     if (widgetIndex != WIDX_INSTALL || str_is_null_or_empty(text))
     {
@@ -434,14 +433,14 @@ static void WindowInstallTrackDesign(rct_window* w)
 {
     auto env = OpenRCT2::GetContext()->GetPlatformEnvironment();
     auto destPath = env->GetDirectoryPath(OpenRCT2::DIRBASE::USER, OpenRCT2::DIRID::TRACK);
-    if (!platform_ensure_directory_exists(destPath.c_str()))
+    if (!Platform::EnsureDirectoryExists(destPath.c_str()))
     {
         log_error("Unable to create directory '%s'", destPath.c_str());
         context_show_error(STR_CANT_SAVE_TRACK_DESIGN, STR_NONE, {});
         return;
     }
 
-    destPath = Path::Combine(destPath, _trackName + ".td6");
+    destPath = Path::Combine(destPath, _trackName + u8".td6");
 
     if (File::Exists(destPath))
     {
@@ -455,7 +454,7 @@ static void WindowInstallTrackDesign(rct_window* w)
     {
         if (track_repository_install(_trackPath.c_str(), _trackName.c_str()))
         {
-            window_close(w);
+            window_close(*w);
         }
         else
         {

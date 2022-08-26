@@ -15,6 +15,7 @@
 #include "../../core/Numerics.hpp"
 #include "../../drawing/LightFX.h"
 #include "../../entity/EntityRegistry.h"
+#include "../../entity/PatrolArea.h"
 #include "../../entity/Peep.h"
 #include "../../entity/Staff.h"
 #include "../../interface/Viewport.h"
@@ -448,12 +449,12 @@ static void sub_6A4101(
 
             if (ride->status == RideStatus::Open && !(ride->lifecycle_flags & RIDE_LIFECYCLE_BROKEN_DOWN))
             {
-                ft.Add<rct_string_id>(STR_RIDE_ENTRANCE_NAME);
+                ft.Add<StringId>(STR_RIDE_ENTRANCE_NAME);
                 ride->FormatNameTo(ft);
             }
             else
             {
-                ft.Add<rct_string_id>(STR_RIDE_ENTRANCE_CLOSED);
+                ft.Add<StringId>(STR_RIDE_ENTRANCE_CLOSED);
             }
             if (gConfigGeneral.upper_case_banners)
             {
@@ -469,8 +470,8 @@ static void sub_6A4101(
             uint16_t scroll = stringWidth > 0 ? (gCurrentTicks / 2) % stringWidth : 0;
 
             PaintAddImageAsChild(
-                session, scrolling_text_setup(session, STR_BANNER_TEXT_FORMAT, ft, scroll, scrollingMode, COLOUR_BLACK), 0, 0,
-                1, 1, 21, height + 7, boundBoxOffsets.x, boundBoxOffsets.y, boundBoxOffsets.z);
+                session, scrolling_text_setup(session, STR_BANNER_TEXT_FORMAT, ft, scroll, scrollingMode, COLOUR_BLACK),
+                { 0, 0, height + 7 }, { 1, 1, 21 }, boundBoxOffsets);
         }
 
         session.InteractionType = ViewportInteractionItem::Footpath;
@@ -898,43 +899,19 @@ static bool ShouldDrawSupports(paint_session& session, const PathElement& pathEl
 
 static void PaintPatrolAreas(paint_session& session, const PathElement& pathEl)
 {
-    if (gStaffDrawPatrolAreas != 0xFFFF)
+    auto colour = GetPatrolAreaTileColour(session.MapPosition);
+    if (colour)
     {
-        auto staffIndex = gStaffDrawPatrolAreas;
-        auto staffType = static_cast<StaffType>(staffIndex & 0x7FFF);
-        auto is_staff_list = staffIndex & 0x8000;
-        auto patrolColour = COLOUR_LIGHT_BLUE;
-
-        if (!is_staff_list)
+        uint32_t baseImageIndex = SPR_TERRAIN_STAFF;
+        auto patrolAreaBaseZ = pathEl.GetBaseZ();
+        if (pathEl.IsSloped())
         {
-            Staff* staff = GetEntity<Staff>(staffIndex);
-            if (staff == nullptr)
-            {
-                log_error("Invalid staff index for draw patrol areas!");
-            }
-            else
-            {
-                if (!staff->IsPatrolAreaSet(session.MapPosition))
-                {
-                    patrolColour = COLOUR_GREY;
-                }
-                staffType = staff->AssignedStaffType;
-            }
+            baseImageIndex = SPR_TERRAIN_STAFF_SLOPED + ((pathEl.GetSlopeDirection() + session.CurrentRotation) & 3);
+            patrolAreaBaseZ += 16;
         }
 
-        if (staff_is_patrol_area_set_for_type(staffType, session.MapPosition))
-        {
-            uint32_t baseImageIndex = SPR_TERRAIN_STAFF;
-            auto patrolAreaBaseZ = pathEl.GetBaseZ();
-            if (pathEl.IsSloped())
-            {
-                baseImageIndex = SPR_TERRAIN_STAFF_SLOPED + ((pathEl.GetSlopeDirection() + session.CurrentRotation) & 3);
-                patrolAreaBaseZ += 16;
-            }
-
-            auto imageId = ImageId(baseImageIndex, patrolColour);
-            PaintAddImageAsParent(session, imageId, { 16, 16, patrolAreaBaseZ + 2 }, { 1, 1, 0 });
-        }
+        auto imageId = ImageId(baseImageIndex, *colour);
+        PaintAddImageAsParent(session, imageId, { 16, 16, patrolAreaBaseZ + 2 }, { 1, 1, 0 });
     }
 }
 
@@ -961,7 +938,6 @@ static void PaintHeightMarkers(paint_session& session, const PathElement& pathEl
 
 static void PaintLampLightEffects(paint_session& session, const PathElement& pathEl, uint16_t height)
 {
-#ifdef __ENABLE_LIGHTFX__
     PROFILED_FUNCTION();
 
     if (lightfx_is_available())
@@ -990,7 +966,6 @@ static void PaintLampLightEffects(paint_session& session, const PathElement& pat
             }
         }
     }
-#endif
 }
 
 /**
@@ -1097,7 +1072,8 @@ void path_paint_box_support(
         surfaceBaseImageIndex += byte_98D6E0[edi];
     }
 
-    if (!session.DidPassSurface)
+    const bool hasPassedSurface = (session.Flags & PaintSessionFlags::PassedSurface) != 0;
+    if (!hasPassedSurface)
     {
         boundBoxOffset.x = 3;
         boundBoxOffset.y = 3;
@@ -1118,7 +1094,7 @@ void path_paint_box_support(
         }
     }
 
-    if (!hasSupports || !session.DidPassSurface)
+    if (!hasSupports || !hasPassedSurface)
     {
         PaintAddImageAsParent(
             session, imageTemplate.WithIndex(surfaceBaseImageIndex), { 0, 0, height }, { boundBoxSize, 0 },
@@ -1236,7 +1212,8 @@ void path_paint_pole_support(
     }
 
     // Below Surface
-    if (!session.DidPassSurface)
+    const bool hasPassedSurface = (session.Flags & PaintSessionFlags::PassedSurface) != 0;
+    if (!hasPassedSurface)
     {
         boundBoxOffset.x = 3;
         boundBoxOffset.y = 3;
@@ -1257,7 +1234,7 @@ void path_paint_pole_support(
         }
     }
 
-    if (!hasSupports || !session.DidPassSurface)
+    if (!hasSupports || !hasPassedSurface)
     {
         PaintAddImageAsParent(
             session, imageTemplate.WithIndex(surfaceBaseImageIndex), { 0, 0, height }, { boundBoxSize.x, boundBoxSize.y, 0 },

@@ -38,7 +38,7 @@
 #include "../object/Object.h"
 #include "../object/ObjectList.h"
 #include "../object/ObjectManager.h"
-#include "../platform/platform.h"
+#include "../platform/Platform.h"
 #include "../profiling/Profiling.h"
 #include "../rct1/RCT1.h"
 #include "../rct12/RCT12.h"
@@ -58,7 +58,7 @@
 
 #include <algorithm>
 
-const rct_string_id ScenarioCategoryStringIds[SCENARIO_CATEGORY_COUNT] = {
+const StringId ScenarioCategoryStringIds[SCENARIO_CATEGORY_COUNT] = {
     STR_BEGINNER_PARKS, STR_CHALLENGING_PARKS,    STR_EXPERT_PARKS, STR_REAL_PARKS, STR_OTHER_PARKS,
 
     STR_DLC_PARKS,      STR_BUILD_YOUR_OWN_PARKS,
@@ -91,19 +91,23 @@ using namespace OpenRCT2;
 void scenario_begin()
 {
     game_load_init();
+    scenario_reset();
 
+    if (gScenarioObjective.Type != OBJECTIVE_NONE && !gLoadKeepWindowsOpen)
+        context_open_window_view(WV_PARK_OBJECTIVE);
+
+    gScreenAge = 0;
+}
+
+void scenario_reset()
+{
     // Set the scenario pseudo-random seeds
-    Random::Rct2::Seed s{ 0x1234567F ^ platform_get_ticks(), 0x789FABCD ^ platform_get_ticks() };
+    Random::Rct2::Seed s{ 0x1234567F ^ Platform::GetTicks(), 0x789FABCD ^ Platform::GetTicks() };
     gScenarioRand.seed(s);
 
-    gParkFlags &= ~PARK_FLAGS_NO_MONEY;
-    if (gParkFlags & PARK_FLAGS_NO_MONEY_SCENARIO)
-        gParkFlags |= PARK_FLAGS_NO_MONEY;
     research_reset_current_item();
     scenery_set_default_placement_configuration();
     News::InitQueue();
-    if (gScenarioObjective.Type != OBJECTIVE_NONE && !gLoadKeepWindowsOpen)
-        context_open_window_view(WV_PARK_OBJECTIVE);
 
     auto& park = GetContext()->GetGameState()->GetPark();
     gParkRating = park.CalculateParkRating();
@@ -116,7 +120,7 @@ void scenario_begin()
         utf8 normalisedName[64];
         ScenarioSources::NormaliseName(normalisedName, sizeof(normalisedName), gScenarioName.c_str());
 
-        rct_string_id localisedStringIds[3];
+        StringId localisedStringIds[3];
         if (language_get_localised_scenario_strings(normalisedName, localisedStringIds))
         {
             if (localisedStringIds[0] != STR_NONE)
@@ -137,16 +141,19 @@ void scenario_begin()
     // Set the last saved game path
     auto env = GetContext()->GetPlatformEnvironment();
     auto savePath = env->GetDirectoryPath(DIRBASE::USER, DIRID::SAVE);
-    gScenarioSavePath = Path::Combine(savePath, park.Name + ".park");
+    gScenarioSavePath = Path::Combine(savePath, park.Name + u8".park");
 
     gCurrentExpenditure = 0;
     gCurrentProfit = 0;
     gWeeklyProfitAverageDividend = 0;
     gWeeklyProfitAverageDivisor = 0;
-    gScenarioCompletedCompanyValue = MONEY64_UNDEFINED;
     gTotalAdmissions = 0;
     gTotalIncomeFromAdmissions = 0;
+
+    gParkFlags &= ~PARK_FLAGS_SCENARIO_COMPLETE_NAME_INPUT;
+    gScenarioCompletedCompanyValue = MONEY64_UNDEFINED;
     gScenarioCompletedBy = "?";
+
     park.ResetHistories();
     finance_reset_history();
     award_reset();
@@ -176,14 +183,13 @@ void scenario_begin()
     }
 
     gParkFlags |= PARK_FLAGS_SPRITES_INITIALISED;
-
-    gScreenAge = 0;
+    gGamePaused = false;
 }
 
 static void scenario_end()
 {
     game_reset_speed();
-    window_close_by_class(WC_DROPDOWN);
+    window_close_by_class(WindowClass::Dropdown);
     window_close_all_except_flags(WF_STICK_TO_BACK | WF_STICK_TO_FRONT);
     context_open_window_view(WV_PARK_OBJECTIVE);
 }
@@ -262,7 +268,7 @@ void scenario_autosave_check()
         return;
 
     // Milliseconds since last save
-    uint32_t timeSinceSave = platform_get_ticks() - gLastAutoSaveUpdate;
+    uint32_t timeSinceSave = Platform::GetTicks() - gLastAutoSaveUpdate;
 
     bool shouldSave = false;
     switch (gConfigGeneral.autosave_frequency)
@@ -532,7 +538,7 @@ uint32_t scenario_rand_max(uint32_t max)
  * Prepare rides, for the finish five rollercoasters objective.
  *  rct2: 0x006788F7
  */
-static bool scenario_prepare_rides_for_save()
+static ResultWithMessage scenario_prepare_rides_for_save()
 {
     int32_t isFiveCoasterObjective = gScenarioObjective.Type == OBJECTIVE_FINISH_5_ROLLERCOASTERS;
     uint8_t rcs = 0;
@@ -557,8 +563,7 @@ static bool scenario_prepare_rides_for_save()
 
     if (isFiveCoasterObjective && rcs < 5)
     {
-        gGameCommandErrorText = STR_NOT_ENOUGH_ROLLER_COASTERS;
-        return false;
+        return { false, STR_NOT_ENOUGH_ROLLER_COASTERS };
     }
 
     bool markTrackAsIndestructible;
@@ -585,28 +590,28 @@ static bool scenario_prepare_rides_for_save()
         }
     } while (tile_element_iterator_next(&it));
 
-    return true;
+    return { true };
 }
 
 /**
  *
  *  rct2: 0x006726C7
  */
-bool scenario_prepare_for_save()
+ResultWithMessage scenario_prepare_for_save()
 {
     // This can return false if the goal is 'Finish 5 roller coaster' and there are too few.
-    if (!scenario_prepare_rides_for_save())
+    const auto prepareRidesResult = scenario_prepare_rides_for_save();
+    if (!prepareRidesResult.Successful)
     {
-        return false;
+        return { false, prepareRidesResult.Message };
     }
 
     if (gScenarioObjective.Type == OBJECTIVE_GUESTS_AND_RATING)
         gParkFlags |= PARK_FLAGS_PARK_OPEN;
 
-    // Fix #2385: saved scenarios did not initialise temperatures to selected climate
-    climate_reset(gClimate);
+    scenario_reset();
 
-    return true;
+    return { true };
 }
 
 ObjectiveStatus Objective::CheckGuestsBy() const

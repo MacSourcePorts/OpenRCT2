@@ -25,7 +25,7 @@ static int32_t map_place_clear_func(
     if ((*tile_element)->GetType() != TileElementType::SmallScenery)
         return 1;
 
-    if (is_scenery && !(flags & GAME_COMMAND_FLAG_PATH_SCENERY))
+    if (is_scenery && !(flags & GAME_COMMAND_FLAG_TRACK_DESIGN))
         return 1;
 
     auto* scenery = (*tile_element)->AsSmallScenery()->GetEntry();
@@ -37,7 +37,7 @@ static int32_t map_place_clear_func(
     }
 
     if (!(gParkFlags & PARK_FLAGS_NO_MONEY) && scenery != nullptr)
-        *price += scenery->removal_price * 10;
+        *price += scenery->removal_price;
 
     if (flags & GAME_COMMAND_FLAG_GHOST)
         return 0;
@@ -306,8 +306,8 @@ void map_obstruction_set_error_text(TileElement* tileElement, GameActions::Resul
             auto* sceneryEntry = tileElement->AsSmallScenery()->GetEntry();
             res.ErrorMessage = STR_X_IN_THE_WAY;
             auto ft = Formatter(res.ErrorMessageArgs.data());
-            rct_string_id stringId = sceneryEntry != nullptr ? sceneryEntry->name : static_cast<rct_string_id>(STR_EMPTY);
-            ft.Add<rct_string_id>(stringId);
+            StringId stringId = sceneryEntry != nullptr ? sceneryEntry->name : static_cast<StringId>(STR_EMPTY);
+            ft.Add<StringId>(stringId);
             break;
         }
         case TileElementType::Entrance:
@@ -329,8 +329,8 @@ void map_obstruction_set_error_text(TileElement* tileElement, GameActions::Resul
             auto* wallEntry = tileElement->AsWall()->GetEntry();
             res.ErrorMessage = STR_X_IN_THE_WAY;
             auto ft = Formatter(res.ErrorMessageArgs.data());
-            rct_string_id stringId = wallEntry != nullptr ? wallEntry->name : static_cast<rct_string_id>(STR_EMPTY);
-            ft.Add<rct_string_id>(stringId);
+            StringId stringId = wallEntry != nullptr ? wallEntry->name : static_cast<StringId>(STR_EMPTY);
+            ft.Add<StringId>(stringId);
             break;
         }
         case TileElementType::LargeScenery:
@@ -338,8 +338,8 @@ void map_obstruction_set_error_text(TileElement* tileElement, GameActions::Resul
             auto* sceneryEntry = tileElement->AsLargeScenery()->GetEntry();
             res.ErrorMessage = STR_X_IN_THE_WAY;
             auto ft = Formatter(res.ErrorMessageArgs.data());
-            rct_string_id stringId = sceneryEntry != nullptr ? sceneryEntry->name : static_cast<rct_string_id>(STR_EMPTY);
-            ft.Add<rct_string_id>(stringId);
+            StringId stringId = sceneryEntry != nullptr ? sceneryEntry->name : static_cast<StringId>(STR_EMPTY);
+            ft.Add<StringId>(stringId);
             break;
         }
         case TileElementType::Banner:

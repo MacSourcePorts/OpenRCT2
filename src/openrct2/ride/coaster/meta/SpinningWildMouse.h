@@ -19,7 +19,7 @@ constexpr const RideTypeDescriptor SpinningWildMouseRTD =
     SET_FIELD(AlternateType, RIDE_TYPE_NULL),
     SET_FIELD(Category, RIDE_CATEGORY_ROLLERCOASTER),
     SET_FIELD(EnabledTrackPieces, {TRACK_STRAIGHT,TRACK_STATION_END,TRACK_LIFT_HILL,  TRACK_SLOPE,TRACK_SLOPE_LONG,TRACK_CURVE_VERY_SMALL,TRACK_CURVE_SMALL, TRACK_BRAKES,TRACK_BLOCK_BRAKES,TRACK_ROTATION_CONTROL_TOGGLE}),
-    SET_FIELD(ExtraTrackPieces, {TRACK_LIFT_HILL_STEEP,TRACK_SLOPE_STEEP,TRACK_SLOPE_CURVE}),
+    SET_FIELD(ExtraTrackPieces, {TRACK_LIFT_HILL_STEEP, TRACK_SLOPE_STEEP_UP, TRACK_SLOPE_STEEP_DOWN, TRACK_SLOPE_CURVE}),
     SET_FIELD(CoveredTrackPieces, {}),
     SET_FIELD(StartTrackPiece, TrackElemType::EndStation),
     SET_FIELD(TrackPaintFunction, get_track_paint_function_wild_mouse),
@@ -38,7 +38,7 @@ constexpr const RideTypeDescriptor SpinningWildMouseRTD =
     SET_FIELD(RatingsCalculationFunction, ride_ratings_calculate_wild_mouse),
     SET_FIELD(RatingsMultipliers, { 50, 30, 30 }),
     SET_FIELD(UpkeepCosts, { 40, 20, 80, 9, 3, 10 }),
-    SET_FIELD(BuildCosts, { 55, 4, 40, }),
+    SET_FIELD(BuildCosts, { 27.50_GBP, 2.00_GBP, 40, }),
     SET_FIELD(DefaultPrices, { 20, 20 }),
     SET_FIELD(DefaultMusic, MUSIC_OBJECT_ROCK_1),
     SET_FIELD(PhotoItem, ShopItem::Photo),
@@ -51,5 +51,6 @@ constexpr const RideTypeDescriptor SpinningWildMouseRTD =
     )),
     SET_FIELD(ColourPreview, { SPR_RIDE_DESIGN_PREVIEW_WILD_MOUSE_TRACK, SPR_RIDE_DESIGN_PREVIEW_WILD_MOUSE_SUPPORTS }),
     SET_FIELD(ColourKey, RideColourKey::Ride),
+    SET_FIELD(Name, "spinning_wild_mouse"),
 };
 // clang-format on

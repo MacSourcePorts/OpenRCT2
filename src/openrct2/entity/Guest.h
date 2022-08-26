@@ -25,6 +25,7 @@
 #define PEEP_VANDALISM_WARNING_THRESHOLD 15
 #define PEEP_NOEXIT_WARNING_THRESHOLD 8
 #define PEEP_LOST_WARNING_THRESHOLD 8
+#define PEEP_TOO_LONG_QUEUE_THRESHOLD 25
 
 #define PEEP_MAX_HAPPINESS 255
 #define PEEP_MAX_HUNGER 255
@@ -191,7 +192,7 @@ struct PeepThought
     PeepThoughtType type;
     union
     {
-        ride_id_t rideId;
+        RideId rideId;
         ShopItem shopItem;
         uint16_t item;
     };
@@ -201,7 +202,7 @@ struct PeepThought
 
 struct Guest;
 struct Staff;
-struct rct_ride_entry_vehicle;
+struct CarEntry;
 
 struct IntensityRange
 {
@@ -261,9 +262,9 @@ struct Guest : Peep
 
 public:
     uint8_t GuestNumRides;
-    uint16_t GuestNextInQueue;
+    EntityId GuestNextInQueue;
     int32_t ParkEntryTime;
-    ride_id_t GuestHeadingToRideId;
+    RideId GuestHeadingToRideId;
     uint8_t GuestIsLostCountdown;
     uint8_t GuestTimeOnRide;
     money16 PaidToEnter;
@@ -285,13 +286,13 @@ public:
     uint16_t TimeInQueue;
     money32 CashInPocket;
     money32 CashSpent;
-    ride_id_t Photo1RideRef;
-    ride_id_t Photo2RideRef;
-    ride_id_t Photo3RideRef;
-    ride_id_t Photo4RideRef;
+    RideId Photo1RideRef;
+    RideId Photo2RideRef;
+    RideId Photo3RideRef;
+    RideId Photo4RideRef;
 
     int8_t RejoinQueueTimeout; // whilst waiting for a free vehicle (or pair) in the entrance
-    ride_id_t PreviousRide;
+    RideId PreviousRide;
     uint16_t PreviousRideTimeOut;
     std::array<PeepThought, PEEP_MAX_THOUGHTS> Thoughts;
     // 0x3F Litter Count split into lots of 3 with time, 0xC0 Time since last recalc
@@ -305,7 +306,7 @@ public:
     uint8_t VoucherType;
     union
     {
-        ride_id_t VoucherRideId;
+        RideId VoucherRideId;
         ShopItemIndex VoucherShopItem;
     };
     uint8_t SurroundingsThoughtTimeout;
@@ -315,7 +316,7 @@ public:
     uint8_t BalloonColour;
     uint8_t UmbrellaColour;
     uint8_t HatColour;
-    ride_id_t FavouriteRide;
+    RideId FavouriteRide;
     uint8_t FavouriteRideRating;
     uint64_t ItemFlags;
 
@@ -330,12 +331,13 @@ public:
     void OnExitRide(Ride* ride);
     void UpdateSpriteType();
     bool HeadingForRideOrParkExit() const;
-    void StopPurchaseThought(uint8_t ride_type);
+    void StopPurchaseThought(ride_type_t rideType);
     void TryGetUpFromSitting();
+    bool ShouldRideWhileRaining(const Ride& ride);
     void ChoseNotToGoOnRide(Ride* ride, bool peepAtRide, bool updateLastRide);
     void PickRideToGoOn();
     void ReadMap();
-    bool ShouldGoOnRide(Ride* ride, int32_t entranceNum, bool atQueue, bool thinking);
+    bool ShouldGoOnRide(Ride* ride, StationIndex entranceNum, bool atQueue, bool thinking);
     bool ShouldGoToShop(Ride* ride, bool peepAtShop);
     bool ShouldFindBench();
     bool UpdateWalkingFindBench();
@@ -358,7 +360,7 @@ public:
     void UpdateEasterEggInteractions();
     void InsertNewThought(PeepThoughtType thought_type);
     void InsertNewThought(PeepThoughtType thought_type, ShopItem thought_arguments);
-    void InsertNewThought(PeepThoughtType thought_type, ride_id_t rideId);
+    void InsertNewThought(PeepThoughtType thought_type, RideId rideId);
     void InsertNewThought(PeepThoughtType thought_type, uint16_t thought_arguments);
     static Guest* Generate(const CoordsXYZ& coords);
     bool UpdateQueuePosition(PeepActionType previous_action);
@@ -374,7 +376,7 @@ public:
 
     // Removes the ride from the guests memory, this includes
     // the history, thoughts, etc.
-    void RemoveRideFromMemory(ride_id_t rideId);
+    void RemoveRideFromMemory(RideId rideId);
 
 private:
     void UpdateRide();
@@ -390,7 +392,7 @@ private:
     void UpdateRideAtEntrance();
     void UpdateRideAdvanceThroughEntrance();
     void UpdateRideLeaveEntranceWaypoints(const Ride& ride);
-    uint8_t GetWaypointedSeatLocation(const Ride& ride, rct_ride_entry_vehicle* vehicle_type, uint8_t track_direction) const;
+    uint8_t GetWaypointedSeatLocation(const Ride& ride, CarEntry* vehicle_type, uint8_t track_direction) const;
     void UpdateRideFreeVehicleCheck();
     void UpdateRideFreeVehicleEnterRide(Ride* ride);
     void UpdateRideApproachVehicle();
@@ -465,11 +467,16 @@ extern uint8_t gGuestInitialThirst;
 
 extern uint32_t gNextGuestNumber;
 
-void guest_set_name(uint16_t spriteIndex, const char* name);
-
 void peep_thought_set_format_args(const PeepThought* thought, Formatter& ft);
 
 void increment_guests_in_park();
 void increment_guests_heading_for_park();
 void decrement_guests_in_park();
 void decrement_guests_heading_for_park();
+
+void PeepUpdateRideLeaveEntranceMaze(Guest* peep, Ride* ride, CoordsXYZD& entrance_loc);
+void PeepUpdateRideLeaveEntranceSpiralSlide(Guest* peep, Ride* ride, CoordsXYZD& entrance_loc);
+void PeepUpdateRideLeaveEntranceDefault(Guest* peep, Ride* ride, CoordsXYZD& entrance_loc);
+
+CoordsXY GetGuestWaypointLocationDefault(const Vehicle& vehicle, const Ride& ride, const StationIndex& CurrentRideStation);
+CoordsXY GetGuestWaypointLocationEnterprise(const Vehicle& vehicle, const Ride& ride, const StationIndex& CurrentRideStation);

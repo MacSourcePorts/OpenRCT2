@@ -33,7 +33,6 @@ struct rct_window
 {
     rct_window_event_list* event_handlers{};
     rct_viewport* viewport{};
-    uint64_t enabled_widgets{};
     uint64_t disabled_widgets{};
     uint64_t pressed_widgets{};
     uint64_t hold_down_widgets{};
@@ -48,7 +47,7 @@ struct rct_window
     union
     {
         rct_windownumber number{};
-        ride_id_t rideId;
+        RideId rideId;
     };
     uint16_t flags{};
     rct_scroll scrolls[3];
@@ -60,8 +59,6 @@ struct rct_window
     {
         campaign_variables campaign;
         new_ride_variables new_ride;
-        news_variables news;
-        map_variables map;
         ride_variables ride;
         track_list_variables track_list;
         error_variables error;
@@ -74,14 +71,12 @@ struct rct_window
     };
     union
     {
-        int16_t picked_peep_old_x; // staff/guest window: peep x gets set to 0x8000 on pickup, this is the old value
+        int16_t picked_peep_old_x; // staff window: peep x gets set to 0x8000 on pickup, this is the old value
         int16_t vehicleIndex;      // Ride window: selected car when setting vehicle colours
-        int16_t numberOfStaff;     // Used in park window.
-        int16_t SceneryEntry;      // Used in sign window.
         int16_t var_48C;
     };
     uint16_t frame_no{};              // updated every tic for motion in windows sprites
-    uint16_t list_information_type{}; // 0 for none, Used as current position of marquee in window_peep
+    uint16_t list_information_type{}; // 0 for none
     union
     {
         int16_t picked_peep_frame; // Animation frame of picked peep in staff window and guest window
@@ -89,20 +84,17 @@ struct rct_window
     };
     union
     {
-        uint32_t highlighted_item;
         uint16_t ride_colour;
-        ResearchItem* research_item;
         const scenario_index_entry* highlighted_scenario;
-        uint16_t var_496;
     };
     int16_t selected_tab{};
     int16_t var_4AE{};
-    uint16_t viewport_target_sprite{};
+    EntityId viewport_target_sprite{ EntityId::GetNull() };
     ScreenCoordsXY savedViewPos{};
-    rct_windowclass classification{};
+    WindowClass classification{};
     colour_t colours[6]{};
     VisibilityCache visibility{};
-    uint16_t viewport_smart_follow_sprite = SPRITE_INDEX_NULL; // Handles setting viewport target sprite etc
+    EntityId viewport_smart_follow_sprite{ EntityId::GetNull() }; // Handles setting viewport target sprite etc
 
     void SetLocation(const CoordsXYZ& coords);
     void ScrollToViewport();
@@ -110,7 +102,10 @@ struct rct_window
     void RemoveViewport();
 
     rct_window() = default;
+    rct_window(rct_window&) = delete;
     virtual ~rct_window() = default;
+
+    rct_window& operator=(const rct_window&) = delete;
 
     virtual bool IsLegacy()
     {
@@ -139,23 +134,23 @@ struct rct_window
     virtual void OnDraw(rct_drawpixelinfo& dpi)
     {
     }
-    virtual void OnDrawWidget(rct_widgetindex widgetIndex, rct_drawpixelinfo& dpi)
+    virtual void OnDrawWidget(WidgetIndex widgetIndex, rct_drawpixelinfo& dpi)
     {
     }
-    virtual OpenRCT2String OnTooltip(rct_widgetindex widgetIndex, rct_string_id fallback)
+    virtual OpenRCT2String OnTooltip(WidgetIndex widgetIndex, StringId fallback)
     {
         return { fallback, {} };
     }
-    virtual void OnMouseDown(rct_widgetindex widgetIndex)
+    virtual void OnMouseDown(WidgetIndex widgetIndex)
     {
     }
-    virtual void OnMouseUp(rct_widgetindex widgetIndex)
+    virtual void OnMouseUp(WidgetIndex widgetIndex)
     {
     }
-    virtual void OnDropdown(rct_widgetindex widgetIndex, int32_t selectedIndex)
+    virtual void OnDropdown(WidgetIndex widgetIndex, int32_t selectedIndex)
     {
     }
-    virtual void OnTextInput(rct_widgetindex widgetIndex, std::string_view text)
+    virtual void OnTextInput(WidgetIndex widgetIndex, std::string_view text)
     {
     }
     virtual ScreenSize OnScrollGetSize(int32_t scrollIndex)
@@ -174,24 +169,28 @@ struct rct_window
     virtual void OnScrollDraw(int32_t scrollIndex, rct_drawpixelinfo& dpi)
     {
     }
-    virtual void OnToolUpdate(rct_widgetindex widgetIndex, const ScreenCoordsXY& screenCoords)
+    virtual void OnToolUpdate(WidgetIndex widgetIndex, const ScreenCoordsXY& screenCoords)
     {
     }
-    virtual void OnToolDown(rct_widgetindex widgetIndex, const ScreenCoordsXY& screenCoords)
+    virtual void OnToolDown(WidgetIndex widgetIndex, const ScreenCoordsXY& screenCoords)
     {
     }
-    virtual void OnToolDrag(rct_widgetindex widgetIndex, const ScreenCoordsXY& screenCoords)
+    virtual void OnToolDrag(WidgetIndex widgetIndex, const ScreenCoordsXY& screenCoords)
     {
     }
-    virtual void OnToolUp(rct_widgetindex, const ScreenCoordsXY&)
+    virtual void OnToolUp(WidgetIndex, const ScreenCoordsXY&)
     {
     }
-    virtual void OnToolAbort(rct_widgetindex widgetIndex)
+    virtual void OnToolAbort(WidgetIndex widgetIndex)
     {
     }
     virtual void OnViewportRotate()
     {
     }
+    virtual void OnMoved(const ScreenCoordsXY&)
+    {
+    }
+    virtual CursorID OnCursor(WidgetIndex, const ScreenCoordsXY&, CursorID);
 };
 
 #ifdef __WARN_SUGGEST_FINAL_METHODS__

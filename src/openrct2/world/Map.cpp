@@ -90,7 +90,7 @@ uint8_t gMapSelectArrowDirection;
 TileCoordsXY gWidePathTileLoopPosition;
 uint16_t gGrassSceneryTileLoopPosition;
 
-int32_t gMapSize;
+TileCoordsXY gMapSize;
 int32_t gMapBaseZ;
 
 std::vector<CoordsXY> gMapSelectionTiles;
@@ -113,7 +113,7 @@ static TilePointerIndex<TileElement> _tileIndexStash;
 static std::vector<TileElement> _tileElementsStash;
 static size_t _tileElementsInUse;
 static size_t _tileElementsInUseStash;
-static int32_t _mapSizeStash;
+static TileCoordsXY _mapSizeStash;
 static int32_t _currentRotationStash;
 
 void StashMap()
@@ -419,28 +419,10 @@ BannerElement* map_get_banner_element_at(const CoordsXYZ& bannerPos, uint8_t pos
  *
  *  rct2: 0x0068AB4C
  */
-void map_init(int32_t size)
+void map_init(const TileCoordsXY& size)
 {
     auto numTiles = MAXIMUM_MAP_SIZE_TECHNICAL * MAXIMUM_MAP_SIZE_TECHNICAL;
-
-    std::vector<TileElement> tileElements;
-    tileElements.resize(numTiles);
-    for (int32_t i = 0; i < numTiles; i++)
-    {
-        auto* element = &tileElements[i];
-        element->ClearAs(TileElementType::Surface);
-        element->SetLastForTile(true);
-        element->base_height = 14;
-        element->clearance_height = 14;
-        element->AsSurface()->SetWaterHeight(0);
-        element->AsSurface()->SetSlope(TILE_ELEMENT_SLOPE_FLAT);
-        element->AsSurface()->SetGrassLength(GRASS_LENGTH_CLEAR_0);
-        element->AsSurface()->SetOwnership(OWNERSHIP_UNOWNED);
-        element->AsSurface()->SetParkFences(0);
-        element->AsSurface()->SetSurfaceStyle(0);
-        element->AsSurface()->SetEdgeStyle(0);
-    }
-    SetTileElements(std::move(tileElements));
+    SetTileElements(std::vector<TileElement>(numTiles, GetDefaultSurfaceElement()));
 
     gGrassSceneryTileLoopPosition = 0;
     gWidePathTileLoopPosition = {};
@@ -545,7 +527,7 @@ int16_t tile_element_height(const CoordsXY& loc)
 
     uint8_t xl, yl; // coordinates across this tile
 
-    uint8_t TILE_SIZE = 31;
+    uint8_t TILE_SIZE = 32;
 
     xl = loc.x & 0x1f;
     yl = loc.y & 0x1f;
@@ -587,14 +569,13 @@ int16_t tile_element_height(const CoordsXY& loc)
     switch (slope)
     {
         case TILE_ELEMENT_SLOPE_NE_SIDE_UP:
-            height += xl / 2 + 1;
+            height += xl / 2;
             break;
         case TILE_ELEMENT_SLOPE_SE_SIDE_UP:
             height += (TILE_SIZE - yl) / 2;
             break;
         case TILE_ELEMENT_SLOPE_NW_SIDE_UP:
             height += yl / 2;
-            height++;
             break;
         case TILE_ELEMENT_SLOPE_SW_SIDE_UP:
             height += (TILE_SIZE - xl) / 2;
@@ -613,7 +594,7 @@ int16_t tile_element_height(const CoordsXY& loc)
                 break;
             case TILE_ELEMENT_SLOPE_S_CORNER_DN:
                 quad_extra = xl + yl;
-                quad = xl + yl - TILE_SIZE - 1;
+                quad = xl + yl - TILE_SIZE;
                 break;
             case TILE_ELEMENT_SLOPE_E_CORNER_DN:
                 quad_extra = TILE_SIZE - xl + yl;
@@ -621,14 +602,13 @@ int16_t tile_element_height(const CoordsXY& loc)
                 break;
             case TILE_ELEMENT_SLOPE_N_CORNER_DN:
                 quad_extra = (TILE_SIZE - xl) + (TILE_SIZE - yl);
-                quad = TILE_SIZE - yl - xl - 1;
+                quad = TILE_SIZE - yl - xl;
                 break;
         }
 
         if (extra_height)
         {
             height += quad_extra / 2;
-            height++;
             return height;
         }
         // This tile is essentially at the next height level
@@ -646,20 +626,13 @@ int16_t tile_element_height(const CoordsXY& loc)
         switch (slope)
         {
             case TILE_ELEMENT_SLOPE_W_E_VALLEY:
-                if (xl + yl <= TILE_SIZE + 1)
-                {
-                    return height;
-                }
-                quad = TILE_SIZE - xl - yl;
+                quad = std::abs(xl - yl);
                 break;
             case TILE_ELEMENT_SLOPE_N_S_VALLEY:
-                quad = xl - yl;
+                quad = std::abs(xl + yl - TILE_SIZE);
                 break;
         }
-        if (quad > 0)
-        {
-            height += quad / 2;
-        }
+        height += quad / 2;
     }
 
     return height;
@@ -792,7 +765,8 @@ bool map_is_location_valid(const CoordsXY& coords)
 
 bool map_is_edge(const CoordsXY& coords)
 {
-    return (coords.x < 32 || coords.y < 32 || coords.x >= GetMapSizeUnits() || coords.y >= GetMapSizeUnits());
+    auto mapSizeUnits = GetMapSizeUnits();
+    return (coords.x < 32 || coords.y < 32 || coords.x >= mapSizeUnits.x || coords.y >= mapSizeUnits.y);
 }
 
 bool map_can_build_at(const CoordsXYZ& loc)
@@ -823,7 +797,8 @@ bool map_is_location_owned(const CoordsXYZ& loc)
 
             if (surfaceElement->GetOwnership() & OWNERSHIP_CONSTRUCTION_RIGHTS_OWNED)
             {
-                if (loc.z < surfaceElement->GetBaseZ() || loc.z - LAND_HEIGHT_STEP > surfaceElement->GetBaseZ())
+                if (loc.z < surfaceElement->GetBaseZ()
+                    || loc.z >= surfaceElement->GetBaseZ() + ConstructionRightsClearanceSmall)
                     return true;
             }
         }
@@ -1009,8 +984,9 @@ int32_t tile_element_get_corner_height(const SurfaceElement* surfaceElement, int
 
 uint8_t map_get_lowest_land_height(const MapRange& range)
 {
+    auto mapSizeMax = GetMapSizeMaxXY();
     MapRange validRange = { std::max(range.GetLeft(), 32), std::max(range.GetTop(), 32),
-                            std::min(range.GetRight(), GetMapSizeMaxXY()), std::min(range.GetBottom(), GetMapSizeMaxXY()) };
+                            std::min(range.GetRight(), mapSizeMax.x), std::min(range.GetBottom(), mapSizeMax.y) };
 
     uint8_t min_height = 0xFF;
     for (int32_t yi = validRange.GetTop(); yi <= validRange.GetBottom(); yi += COORDS_XY_STEP)
@@ -1038,8 +1014,9 @@ uint8_t map_get_lowest_land_height(const MapRange& range)
 
 uint8_t map_get_highest_land_height(const MapRange& range)
 {
+    auto mapSizeMax = GetMapSizeMaxXY();
     MapRange validRange = { std::max(range.GetLeft(), 32), std::max(range.GetTop(), 32),
-                            std::min(range.GetRight(), GetMapSizeMaxXY()), std::min(range.GetBottom(), GetMapSizeMaxXY()) };
+                            std::min(range.GetRight(), mapSizeMax.x), std::min(range.GetBottom(), mapSizeMax.y) };
 
     uint8_t max_height = 0;
     for (int32_t yi = validRange.GetTop(); yi <= validRange.GetBottom(); yi += COORDS_XY_STEP)
@@ -1119,7 +1096,7 @@ void map_remove_all_rides()
                 if (it.element->AsPath()->IsQueue())
                 {
                     it.element->AsPath()->SetHasQueueBanner(false);
-                    it.element->AsPath()->SetRideIndex(RIDE_ID_NULL);
+                    it.element->AsPath()->SetRideIndex(RideId::GetNull());
                 }
                 break;
             case TileElementType::Entrance:
@@ -1333,9 +1310,9 @@ void map_update_tiles()
         }
 
         // Repeat for each 256x256 block on the map
-        for (int32_t blockY = 0; blockY < gMapSize; blockY += 256)
+        for (int32_t blockY = 0; blockY < gMapSize.y; blockY += 256)
         {
-            for (int32_t blockX = 0; blockX < gMapSize; blockX += 256)
+            for (int32_t blockX = 0; blockX < gMapSize.x; blockX += 256)
             {
                 auto mapPos = TileCoordsXY{ blockX + x, blockY + y }.ToCoordsXY();
                 auto* surfaceElement = map_get_surface_element_at(mapPos);
@@ -1361,14 +1338,14 @@ void map_remove_provisional_elements()
         footpath_provisional_remove();
         gProvisionalFootpath.Flags |= PROVISIONAL_PATH_FLAG_1;
     }
-    if (window_find_by_class(WC_RIDE_CONSTRUCTION) != nullptr)
+    if (window_find_by_class(WindowClass::RideConstruction) != nullptr)
     {
         ride_remove_provisional_track_piece();
         ride_entrance_exit_remove_ghost();
     }
     // This is in non performant so only make network games suffer for it
     // non networked games do not need this as its to prevent desyncs.
-    if ((network_get_mode() != NETWORK_MODE_NONE) && window_find_by_class(WC_TRACK_DESIGN_PLACE) != nullptr)
+    if ((network_get_mode() != NETWORK_MODE_NONE) && window_find_by_class(WindowClass::TrackDesignPlace) != nullptr)
     {
         auto intent = Intent(INTENT_ACTION_TRACK_DESIGN_REMOVE_PROVISIONAL);
         context_broadcast_intent(&intent);
@@ -1386,14 +1363,14 @@ void map_restore_provisional_elements()
             gProvisionalFootpath.SurfaceIndex, gProvisionalFootpath.RailingsIndex, gProvisionalFootpath.Position,
             gProvisionalFootpath.Slope, gProvisionalFootpath.ConstructFlags);
     }
-    if (window_find_by_class(WC_RIDE_CONSTRUCTION) != nullptr)
+    if (window_find_by_class(WindowClass::RideConstruction) != nullptr)
     {
         ride_restore_provisional_track_piece();
         ride_entrance_exit_place_provisional_ghost();
     }
     // This is in non performant so only make network games suffer for it
     // non networked games do not need this as its to prevent desyncs.
-    if ((network_get_mode() != NETWORK_MODE_NONE) && window_find_by_class(WC_TRACK_DESIGN_PLACE) != nullptr)
+    if ((network_get_mode() != NETWORK_MODE_NONE) && window_find_by_class(WindowClass::TrackDesignPlace) != nullptr)
     {
         auto intent = Intent(INTENT_ACTION_TRACK_DESIGN_RESTORE_PROVISIONAL);
         context_broadcast_intent(&intent);
@@ -1406,7 +1383,7 @@ void map_restore_provisional_elements()
  */
 void map_remove_out_of_range_elements()
 {
-    int32_t mapMaxXY = GetMapSizeMaxXY();
+    auto mapSizeMax = GetMapSizeMaxXY();
 
     // Ensure that we can remove elements
     //
@@ -1416,11 +1393,11 @@ void map_remove_out_of_range_elements()
     bool buildState = gCheatsBuildInPauseMode;
     gCheatsBuildInPauseMode = true;
 
-    for (int32_t y = 0; y < MAXIMUM_MAP_SIZE_BIG; y += COORDS_XY_STEP)
+    for (int32_t y = MAXIMUM_MAP_SIZE_BIG - COORDS_XY_STEP; y >= 0; y -= COORDS_XY_STEP)
     {
-        for (int32_t x = 0; x < MAXIMUM_MAP_SIZE_BIG; x += COORDS_XY_STEP)
+        for (int32_t x = MAXIMUM_MAP_SIZE_BIG - COORDS_XY_STEP; x >= 0; x -= COORDS_XY_STEP)
         {
-            if (x == 0 || y == 0 || x >= mapMaxXY || y >= mapMaxXY)
+            if (x == 0 || y == 0 || x >= mapSizeMax.x || y >= mapSizeMax.y)
             {
                 // Note this purposely does not use LandSetRightsAction as X Y coordinates are outside of normal range.
                 auto surfaceElement = map_get_surface_element_at(CoordsXY{ x, y });
@@ -1476,19 +1453,15 @@ static void map_extend_boundary_surface_extend_tile(const SurfaceElement& source
 }
 
 /**
- * Copies the terrain and slope from the edge of the map to the new tiles. Used when increasing the size of the map.
- *  rct2: 0x0068AC15
+ * Copies the terrain and slope from the Y edge of the map to the new tiles. Used when increasing the size of the map.
  */
-void map_extend_boundary_surface()
+void map_extend_boundary_surface_y()
 {
-    SurfaceElement *existingTileElement, *newTileElement;
-    int32_t x, y;
-
-    y = gMapSize - 2;
-    for (x = 0; x < MAXIMUM_MAP_SIZE_TECHNICAL; x++)
+    auto y = gMapSize.y - 2;
+    for (auto x = 0; x < MAXIMUM_MAP_SIZE_TECHNICAL; x++)
     {
-        existingTileElement = map_get_surface_element_at(TileCoordsXY{ x, y - 1 }.ToCoordsXY());
-        newTileElement = map_get_surface_element_at(TileCoordsXY{ x, y }.ToCoordsXY());
+        auto existingTileElement = map_get_surface_element_at(TileCoordsXY{ x, y - 1 }.ToCoordsXY());
+        auto newTileElement = map_get_surface_element_at(TileCoordsXY{ x, y }.ToCoordsXY());
 
         if (existingTileElement != nullptr && newTileElement != nullptr)
         {
@@ -1497,18 +1470,22 @@ void map_extend_boundary_surface()
 
         update_park_fences({ x << 5, y << 5 });
     }
+}
 
-    x = gMapSize - 2;
-    for (y = 0; y < MAXIMUM_MAP_SIZE_TECHNICAL; y++)
+/**
+ * Copies the terrain and slope from the X edge of the map to the new tiles. Used when increasing the size of the map.
+ */
+void map_extend_boundary_surface_x()
+{
+    auto x = gMapSize.x - 2;
+    for (auto y = 0; y < MAXIMUM_MAP_SIZE_TECHNICAL; y++)
     {
-        existingTileElement = map_get_surface_element_at(TileCoordsXY{ x - 1, y }.ToCoordsXY());
-        newTileElement = map_get_surface_element_at(TileCoordsXY{ x, y }.ToCoordsXY());
-
+        auto existingTileElement = map_get_surface_element_at(TileCoordsXY{ x - 1, y }.ToCoordsXY());
+        auto newTileElement = map_get_surface_element_at(TileCoordsXY{ x, y }.ToCoordsXY());
         if (existingTileElement != nullptr && newTileElement != nullptr)
         {
             map_extend_boundary_surface_extend_tile(*existingTileElement, *newTileElement);
         }
-
         update_park_fences({ x << 5, y << 5 });
     }
 }
@@ -2133,7 +2110,7 @@ TrackElement* map_get_track_element_at_of_type_seq(const CoordsXYZD& location, t
  * @param y y units, not tiles.
  * @param z Base height.
  */
-TileElement* map_get_track_element_at_of_type_from_ride(const CoordsXYZ& trackPos, track_type_t trackType, ride_id_t rideIndex)
+TileElement* map_get_track_element_at_of_type_from_ride(const CoordsXYZ& trackPos, track_type_t trackType, RideId rideIndex)
 {
     TileElement* tileElement = map_get_first_element_at(trackPos);
     if (tileElement == nullptr)
@@ -2162,7 +2139,7 @@ TileElement* map_get_track_element_at_of_type_from_ride(const CoordsXYZ& trackPo
  * @param y y units, not tiles.
  * @param z Base height.
  */
-TileElement* map_get_track_element_at_from_ride(const CoordsXYZ& trackPos, ride_id_t rideIndex)
+TileElement* map_get_track_element_at_from_ride(const CoordsXYZ& trackPos, RideId rideIndex)
 {
     TileElement* tileElement = map_get_first_element_at(trackPos);
     if (tileElement == nullptr)
@@ -2190,7 +2167,7 @@ TileElement* map_get_track_element_at_from_ride(const CoordsXYZ& trackPos, ride_
  * @param z Base height.
  * @param direction The direction (0 - 3).
  */
-TileElement* map_get_track_element_at_with_direction_from_ride(const CoordsXYZD& trackPos, ride_id_t rideIndex)
+TileElement* map_get_track_element_at_with_direction_from_ride(const CoordsXYZD& trackPos, RideId rideIndex)
 {
     TileElement* tileElement = map_get_first_element_at(trackPos);
     if (tileElement == nullptr)
@@ -2273,7 +2250,7 @@ uint16_t check_max_allowable_land_rights_for_tile(const CoordsXYZ& tileMapPos)
         {
             destOwnership = OWNERSHIP_CONSTRUCTION_RIGHTS_OWNED;
             // Do not own construction rights if too high/below surface
-            if (tileElement->base_height - 3 > tilePos.z || tileElement->base_height < tilePos.z)
+            if (tileElement->base_height - ConstructionRightsClearanceSmall > tilePos.z || tileElement->base_height < tilePos.z)
             {
                 destOwnership = OWNERSHIP_UNOWNED;
                 break;
@@ -2303,4 +2280,15 @@ void FixLandOwnershipTilesWithOwnership(std::initializer_list<TileCoordsXY> tile
             update_park_fences_around_tile({ (*tile).x * 32, (*tile).y * 32 });
         }
     }
+}
+
+MapRange ClampRangeWithinMap(const MapRange& range)
+{
+    auto mapSizeMax = GetMapSizeMaxXY();
+    auto aX = std::max<decltype(range.GetLeft())>(COORDS_XY_STEP, range.GetLeft());
+    auto bX = std::min<decltype(range.GetRight())>(mapSizeMax.x, range.GetRight());
+    auto aY = std::max<decltype(range.GetTop())>(COORDS_XY_STEP, range.GetTop());
+    auto bY = std::min<decltype(range.GetBottom())>(mapSizeMax.y, range.GetBottom());
+    MapRange validRange = MapRange{ aX, aY, bX, bY };
+    return validRange;
 }

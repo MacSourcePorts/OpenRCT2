@@ -85,7 +85,7 @@ uint8_t RCT12SurfaceElement::GetOwnership() const
 
 uint32_t RCT12SurfaceElement::GetWaterHeight() const
 {
-    return (terrain & RCT12_TILE_ELEMENT_SURFACE_WATER_HEIGHT_MASK) * 16;
+    return (terrain & RCT12_TILE_ELEMENT_SURFACE_WATER_HEIGHT_MASK) * WATER_HEIGHT_STEP;
 }
 
 uint8_t RCT12SurfaceElement::GetParkFences() const
@@ -444,7 +444,7 @@ uint8_t RCT12BannerElement::GetAllowedEdges() const
     return AllowedEdges & 0b00001111;
 }
 
-bool is_user_string_id(rct_string_id stringId)
+bool is_user_string_id(StringId stringId)
 {
     return stringId >= 0x8000 && stringId < 0x9000;
 }
@@ -487,12 +487,12 @@ ObjectEntryIndex RCTEntryIndexToOpenRCT2EntryIndex(const RCT12ObjectEntryIndex i
     return index;
 }
 
-ride_id_t RCT12RideIdToOpenRCT2RideId(const RCT12RideId rideId)
+RideId RCT12RideIdToOpenRCT2RideId(const RCT12RideId rideId)
 {
     if (rideId == RCT12_RIDE_ID_NULL)
-        return RIDE_ID_NULL;
+        return RideId::GetNull();
 
-    return static_cast<ride_id_t>(rideId);
+    return RideId::FromUnderlying(rideId);
 }
 
 static bool RCT12IsFormatChar(codepoint_t c)
@@ -741,6 +741,23 @@ std::string_view GetStationIdentifierFromStyle(uint8_t style)
         return _stationStyles[style];
     }
     return {};
+}
+
+uint8_t GetStationStyleFromIdentifier(u8string_view identifier)
+{
+    // Not supported in TD6, closest match.
+    if (identifier == "openrct2.station.noplatformnoentrance")
+        return RCT12_STATION_STYLE_INVISIBLE;
+
+    for (uint8_t i = RCT12_STATION_STYLE_PLAIN; i < std::size(_stationStyles); i++)
+    {
+        if (_stationStyles[i] == identifier)
+        {
+            return i;
+        }
+    }
+
+    return RCT12_STATION_STYLE_PLAIN;
 }
 
 std::optional<uint8_t> GetStyleFromMusicIdentifier(std::string_view identifier)

@@ -15,6 +15,8 @@
 #include <openrct2-ui/windows/Window.h>
 #include <openrct2/Context.h>
 #include <openrct2/Game.h>
+#include <openrct2/actions/RideDemolishAction.h>
+#include <openrct2/actions/RideSetStatusAction.h>
 #include <openrct2/config/Config.h>
 #include <openrct2/drawing/Drawing.h>
 #include <openrct2/interface/Colour.h>
@@ -26,7 +28,7 @@
 #include <openrct2/windows/Intent.h>
 #include <openrct2/world/Park.h>
 
-static constexpr const rct_string_id WINDOW_TITLE = STR_NONE;
+static constexpr const StringId WINDOW_TITLE = STR_NONE;
 static constexpr const int32_t WH = 240;
 static constexpr const int32_t WW = 340;
 
@@ -93,10 +95,13 @@ enum
     INFORMATION_TYPE_RELIABILITY,
     INFORMATION_TYPE_DOWN_TIME,
     INFORMATION_TYPE_GUESTS_FAVOURITE,
+    INFORMATION_TYPE_EXCITEMENT,
+    INFORMATION_TYPE_INTENSITY,
+    INFORMATION_TYPE_NAUSEA,
     DROPDOWN_LIST_COUNT,
 };
 
-static constexpr const rct_string_id ride_info_type_string_mapping[DROPDOWN_LIST_COUNT] = {
+static constexpr const StringId ride_info_type_string_mapping[DROPDOWN_LIST_COUNT] = {
     STR_STATUS,
     STR_POPULARITY,
     STR_SATISFACTION,
@@ -112,12 +117,15 @@ static constexpr const rct_string_id ride_info_type_string_mapping[DROPDOWN_LIST
     STR_RELIABILITY,
     STR_DOWN_TIME,
     STR_GUESTS_FAVOURITE,
+    STR_RIDE_LIST_EXCITEMENT,
+    STR_RIDE_LIST_INTENSITY,
+    STR_RIDE_LIST_NAUSEA,
 };
 
-static constexpr const rct_string_id ride_list_statusbar_count_strings[PAGE_COUNT] = {
+static constexpr const StringId ride_list_statusbar_count_strings[PAGE_COUNT] = {
     STR_NUMBER_RIDES,
     STR_NUMBER_SHOPS_AND_STALLS,
-    STR_NUMBER_RESTROOMS_AND_INFORMATION_KIOSKS,
+    STR_NUMBER_TOILETS_AND_INFORMATION_KIOSKS,
 };
 
 static constexpr const bool ride_info_type_money_mapping[DROPDOWN_LIST_COUNT] = {
@@ -136,12 +144,15 @@ static constexpr const bool ride_info_type_money_mapping[DROPDOWN_LIST_COUNT] = 
     false, // Reliability
     false, // Down time
     false, // Guests favourite
+    false, // Excitement
+    false, // Intensity
+    false, // Nausea
 };
 
-static constexpr const rct_string_id page_names[] = {
+static constexpr const StringId page_names[] = {
     STR_RIDES,
     STR_SHOPS_AND_STALLS,
-    STR_RESTROOMS_AND_INFORMATION_KIOSKS,
+    STR_TOILETS_AND_INFORMATION_KIOSKS,
 };
 
 class RideListWindow final : public Window
@@ -149,20 +160,13 @@ class RideListWindow final : public Window
 private:
     bool _quickDemolishMode = false;
     int32_t _windowRideListInformationType = INFORMATION_TYPE_STATUS;
-    std::vector<ride_id_t> _rideList;
+    std::vector<RideId> _rideList;
 
 public:
     void OnOpen() override
     {
         widgets = window_ride_list_widgets;
-        enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_OPEN_CLOSE_ALL) | (1ULL << WIDX_CURRENT_INFORMATION_TYPE)
-            | (1ULL << WIDX_INFORMATION_TYPE_DROPDOWN) | (1ULL << WIDX_SORT) | (1ULL << WIDX_TAB_1) | (1ULL << WIDX_TAB_2)
-            | (1ULL << WIDX_TAB_3) | (1ULL << WIDX_CLOSE_LIGHT) | (1ULL << WIDX_OPEN_LIGHT);
-        if (network_get_mode() != NETWORK_MODE_CLIENT)
-        {
-            enabled_widgets |= (1ULL << WIDX_QUICK_DEMOLISH);
-        }
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
         page = PAGE_RIDES;
         selected_list_item = -1;
         frame_no = 0;
@@ -208,12 +212,12 @@ public:
      *
      *  rct2: 0x006B3511
      */
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
             case WIDX_CLOSE:
-                window_close(this);
+                window_close(*this);
                 break;
             case WIDX_SORT:
                 list_information_type = _windowRideListInformationType;
@@ -259,13 +263,13 @@ public:
      *
      *  rct2: 0x006B3532
      */
-    void OnMouseDown(rct_widgetindex widgetIndex) override
+    void OnMouseDown(WidgetIndex widgetIndex) override
     {
         if (widgetIndex == WIDX_OPEN_CLOSE_ALL)
         {
             const auto& widget = widgets[widgetIndex];
-            gDropdownItemsFormat[0] = STR_CLOSE_ALL;
-            gDropdownItemsFormat[1] = STR_OPEN_ALL;
+            gDropdownItems[0].Format = STR_CLOSE_ALL;
+            gDropdownItems[1].Format = STR_OPEN_ALL;
             WindowDropdownShowText({ windowPos.x + widget.left, windowPos.y + widget.top }, widget.height(), colours[1], 0, 2);
         }
         else if (widgetIndex == WIDX_INFORMATION_TYPE_DROPDOWN)
@@ -274,7 +278,7 @@ public:
 
             int32_t lastType;
             if (page == PAGE_RIDES)
-                lastType = INFORMATION_TYPE_GUESTS_FAVOURITE;
+                lastType = INFORMATION_TYPE_NAUSEA;
             else
                 lastType = INFORMATION_TYPE_RUNNING_COST;
 
@@ -295,8 +299,8 @@ public:
                     selectedIndex = numItems;
                 }
 
-                gDropdownItemsFormat[numItems] = STR_DROPDOWN_MENU_LABEL;
-                gDropdownItemsArgs[numItems] = ride_info_type_string_mapping[type];
+                gDropdownItems[numItems].Format = STR_DROPDOWN_MENU_LABEL;
+                gDropdownItems[numItems].Args = ride_info_type_string_mapping[type];
                 numItems++;
             }
 
@@ -314,7 +318,7 @@ public:
      *
      *  rct2: 0x006B3547
      */
-    void OnDropdown(rct_widgetindex widgetIndex, int32_t dropdownIndex) override
+    void OnDropdown(WidgetIndex widgetIndex, int32_t dropdownIndex) override
     {
         if (widgetIndex == WIDX_OPEN_CLOSE_ALL)
         {
@@ -335,7 +339,7 @@ public:
                 return;
 
             int32_t informationType = INFORMATION_TYPE_STATUS;
-            uint32_t arg = static_cast<uint32_t>(gDropdownItemsArgs[dropdownIndex]);
+            uint32_t arg = static_cast<uint32_t>(gDropdownItems[dropdownIndex].Args);
             for (size_t i = 0; i < std::size(ride_info_type_string_mapping); i++)
             {
                 if (arg == ride_info_type_string_mapping[i])
@@ -356,7 +360,7 @@ public:
     void OnUpdate() override
     {
         frame_no = (frame_no + 1) % 64;
-        widget_invalidate(this, WIDX_TAB_1 + page);
+        widget_invalidate(*this, WIDX_TAB_1 + page);
         if (_windowRideListInformationType != INFORMATION_TYPE_STATUS)
             Invalidate();
     }
@@ -398,16 +402,16 @@ public:
 
         // Open ride window
         const auto rideIndex = _rideList[index];
-        auto* ridePtr = get_ride(rideIndex);
         if (_quickDemolishMode && network_get_mode() != NETWORK_MODE_CLIENT)
         {
-            ride_action_modify(ridePtr, RIDE_MODIFY_DEMOLISH, GAME_COMMAND_FLAG_APPLY);
+            auto gameAction = RideDemolishAction(rideIndex, RIDE_MODIFY_DEMOLISH);
+            GameActions::Execute(&gameAction);
             RefreshList();
         }
         else
         {
-            auto intent = Intent(WC_RIDE);
-            intent.putExtra(INTENT_EXTRA_RIDE_ID, EnumValue(rideIndex));
+            auto intent = Intent(WindowClass::Ride);
+            intent.putExtra(INTENT_EXTRA_RIDE_ID, rideIndex.ToUnderlying());
             context_open_intent(&intent);
         }
     }
@@ -488,9 +492,9 @@ public:
             }
 
             widgets[WIDX_CLOSE_LIGHT].image = SPR_G2_RCT1_CLOSE_BUTTON_0 + (allClosed ? 1 : 0) * 2
-                + WidgetIsPressed(this, WIDX_CLOSE_LIGHT);
+                + WidgetIsPressed(*this, WIDX_CLOSE_LIGHT);
             widgets[WIDX_OPEN_LIGHT].image = SPR_G2_RCT1_OPEN_BUTTON_0 + (allOpen ? 1 : 0) * 2
-                + WidgetIsPressed(this, WIDX_OPEN_LIGHT);
+                + WidgetIsPressed(*this, WIDX_OPEN_LIGHT);
             widgets[WIDX_QUICK_DEMOLISH].top = widgets[WIDX_OPEN_LIGHT].bottom + 3;
         }
         else
@@ -511,7 +515,7 @@ public:
      */
     void OnDraw(rct_drawpixelinfo& dpi) override
     {
-        WindowDrawWidgets(this, &dpi);
+        WindowDrawWidgets(*this, &dpi);
         DrawTabImages(&dpi);
 
         // Draw number of attractions on bottom
@@ -534,7 +538,7 @@ public:
         auto y = 0;
         for (size_t i = 0; i < _rideList.size(); i++)
         {
-            rct_string_id format = (_quickDemolishMode ? STR_RED_STRINGID : STR_BLACK_STRING);
+            StringId format = (_quickDemolishMode ? STR_RED_STRINGID : STR_BLACK_STRING);
             if (i == static_cast<size_t>(selected_list_item))
             {
                 // Background highlight
@@ -556,7 +560,7 @@ public:
             ft = Formatter();
             ft.Increment(2);
             auto formatSecondaryEnabled = true;
-            rct_string_id formatSecondary = 0;
+            StringId formatSecondary = 0;
             switch (_windowRideListInformationType)
             {
                 case INFORMATION_TYPE_STATUS:
@@ -696,12 +700,36 @@ public:
                                                                          : STR_GUESTS_FAVOURITE_PLURAL_LABEL;
                     }
                     break;
+                case INFORMATION_TYPE_EXCITEMENT:
+                    formatSecondary = STR_RATING_UKNOWN_LABEL;
+                    if (ride_has_ratings(ridePtr))
+                    {
+                        formatSecondary = STR_EXCITEMENT_LABEL;
+                        ft.Add<uint16_t>(ridePtr->excitement);
+                    }
+                    break;
+                case INFORMATION_TYPE_INTENSITY:
+                    formatSecondary = STR_RATING_UKNOWN_LABEL;
+                    if (ride_has_ratings(ridePtr))
+                    {
+                        formatSecondary = STR_INTENSITY_LABEL;
+                        ft.Add<uint16_t>(ridePtr->intensity);
+                    }
+                    break;
+                case INFORMATION_TYPE_NAUSEA:
+                    formatSecondary = STR_RATING_UKNOWN_LABEL;
+                    if (ride_has_ratings(ridePtr))
+                    {
+                        formatSecondary = STR_NAUSEA_LABEL;
+                        ft.Add<uint16_t>(ridePtr->nausea);
+                    }
+                    break;
             }
 
             if (formatSecondaryEnabled)
             {
                 ft.Rewind();
-                ft.Add<rct_string_id>(formatSecondary);
+                ft.Add<StringId>(formatSecondary);
             }
             DrawTextEllipsised(&dpi, { 160, y - 1 }, 157, format, ft);
             y += SCROLLABLE_ROW_HEIGHT;
@@ -876,6 +904,24 @@ private:
                             return thisRide.guests_favourite <= otherRide.guests_favourite;
                         });
                     break;
+                case INFORMATION_TYPE_EXCITEMENT:
+                    currentListPosition = SortList(
+                        currentListPosition, rideRef, [](const Ride& thisRide, const Ride& otherRide) -> bool {
+                            return thisRide.excitement <= otherRide.excitement;
+                        });
+                    break;
+                case INFORMATION_TYPE_INTENSITY:
+                    currentListPosition = SortList(
+                        currentListPosition, rideRef, [](const Ride& thisRide, const Ride& otherRide) -> bool {
+                            return thisRide.intensity <= otherRide.intensity;
+                        });
+                    break;
+                case INFORMATION_TYPE_NAUSEA:
+                    currentListPosition = SortList(
+                        currentListPosition, rideRef, [](const Ride& thisRide, const Ride& otherRide) -> bool {
+                            return thisRide.nausea <= otherRide.nausea;
+                        });
+                    break;
             }
             listIndex++;
         }
@@ -891,7 +937,8 @@ private:
         {
             if (rideRef.status != RideStatus::Closed && rideRef.GetClassification() == static_cast<RideClassification>(page))
             {
-                ride_set_status(&rideRef, RideStatus::Closed);
+                auto gameAction = RideSetStatusAction(rideRef.id, RideStatus::Closed);
+                GameActions::Execute(&gameAction);
             }
         }
     }
@@ -903,7 +950,8 @@ private:
         {
             if (rideRef.status != RideStatus::Open && rideRef.GetClassification() == static_cast<RideClassification>(page))
             {
-                ride_set_status(&rideRef, RideStatus::Open);
+                auto gameAction = RideSetStatusAction(rideRef.id, RideStatus::Open);
+                GameActions::Execute(&gameAction);
             }
         }
     }
@@ -916,10 +964,10 @@ private:
 rct_window* WindowRideListOpen()
 {
     // Check if window is already open
-    auto* window = window_bring_to_front_by_class(WC_RIDE_LIST);
+    auto* window = window_bring_to_front_by_class(WindowClass::RideList);
     if (window == nullptr)
     {
-        window = WindowCreate<RideListWindow>(WC_RIDE_LIST, ScreenCoordsXY(32, 32), WW, WH, WF_10 | WF_RESIZABLE);
+        window = WindowCreate<RideListWindow>(WindowClass::RideList, ScreenCoordsXY(32, 32), WW, WH, WF_10 | WF_RESIZABLE);
     }
     return window;
 }

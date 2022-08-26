@@ -34,9 +34,9 @@ static rct_widget window_network_status_widgets[] = {
 static char window_network_status_text[1024];
 
 static void WindowNetworkStatusOnclose(rct_window *w);
-static void WindowNetworkStatusMouseup(rct_window *w, rct_widgetindex widgetIndex);
+static void WindowNetworkStatusMouseup(rct_window *w, WidgetIndex widgetIndex);
 static void WindowNetworkStatusUpdate(rct_window *w);
-static void WindowNetworkStatusTextinput(rct_window *w, rct_widgetindex widgetIndex, char *text);
+static void WindowNetworkStatusTextinput(rct_window *w, WidgetIndex widgetIndex, char *text);
 static void WindowNetworkStatusInvalidate(rct_window *w);
 static void WindowNetworkStatusPaint(rct_window *w, rct_drawpixelinfo *dpi);
 
@@ -59,15 +59,14 @@ rct_window* WindowNetworkStatusOpen(const char* text, close_callback onClose)
     safe_strcpy(window_network_status_text, text, sizeof(window_network_status_text));
 
     // Check if window is already open
-    rct_window* window = window_bring_to_front_by_class_with_flags(WC_NETWORK_STATUS, 0);
+    rct_window* window = window_bring_to_front_by_class_with_flags(WindowClass::NetworkStatus, 0);
     if (window != nullptr)
         return window;
 
-    window = WindowCreateCentred(420, 90, &window_network_status_events, WC_NETWORK_STATUS, WF_10 | WF_TRANSPARENT);
+    window = WindowCreateCentred(420, 90, &window_network_status_events, WindowClass::NetworkStatus, WF_10 | WF_TRANSPARENT);
 
     window->widgets = window_network_status_widgets;
-    window->enabled_widgets = 1ULL << WIDX_CLOSE;
-    WindowInitScrollWidgets(window);
+    WindowInitScrollWidgets(*window);
     window->no_list_items = 0;
     window->selected_list_item = -1;
     window->frame_no = 0;
@@ -85,13 +84,13 @@ rct_window* WindowNetworkStatusOpen(const char* text, close_callback onClose)
 void WindowNetworkStatusClose()
 {
     _onClose = nullptr;
-    window_close_by_class(WC_NETWORK_STATUS);
+    window_close_by_class(WindowClass::NetworkStatus);
 }
 
 rct_window* WindowNetworkStatusOpenPassword()
 {
     rct_window* window;
-    window = window_bring_to_front_by_class(WC_NETWORK_STATUS);
+    window = window_bring_to_front_by_class(WindowClass::NetworkStatus);
     if (window == nullptr)
         return nullptr;
 
@@ -108,22 +107,22 @@ static void WindowNetworkStatusOnclose(rct_window* w)
     }
 }
 
-static void WindowNetworkStatusMouseup(rct_window* w, rct_widgetindex widgetIndex)
+static void WindowNetworkStatusMouseup(rct_window* w, WidgetIndex widgetIndex)
 {
     switch (widgetIndex)
     {
         case WIDX_CLOSE:
-            window_close(w);
+            window_close(*w);
             break;
     }
 }
 
 static void WindowNetworkStatusUpdate(rct_window* w)
 {
-    widget_invalidate(w, WIDX_BACKGROUND);
+    widget_invalidate(*w, WIDX_BACKGROUND);
 }
 
-static void WindowNetworkStatusTextinput(rct_window* w, rct_widgetindex widgetIndex, char* text)
+static void WindowNetworkStatusTextinput(rct_window* w, WidgetIndex widgetIndex, char* text)
 {
     _password[0] = '\0';
     switch (widgetIndex)
@@ -154,13 +153,13 @@ static void WindowNetworkStatusInvalidate(rct_window* w)
 
 static void WindowNetworkStatusPaint(rct_window* w, rct_drawpixelinfo* dpi)
 {
-    WindowDrawWidgets(w, dpi);
+    WindowDrawWidgets(*w, dpi);
 
-    thread_local std::string buffer;
-    buffer.assign("{BLACK}");
-    buffer += window_network_status_text;
-    gfx_clip_string(buffer.data(), w->widgets[WIDX_BACKGROUND].right - 50, FontSpriteBase::MEDIUM);
+    thread_local std::string _buffer;
+    _buffer.assign("{BLACK}");
+    _buffer += window_network_status_text;
+    gfx_clip_string(_buffer.data(), w->widgets[WIDX_BACKGROUND].right - 50, FontSpriteBase::MEDIUM);
     ScreenCoordsXY screenCoords(w->windowPos.x + (w->width / 2), w->windowPos.y + (w->height / 2));
-    screenCoords.x -= gfx_get_string_width(buffer, FontSpriteBase::MEDIUM) / 2;
-    gfx_draw_string(dpi, screenCoords, buffer.c_str());
+    screenCoords.x -= gfx_get_string_width(_buffer, FontSpriteBase::MEDIUM) / 2;
+    gfx_draw_string(dpi, screenCoords, _buffer.c_str());
 }

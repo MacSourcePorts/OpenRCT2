@@ -72,16 +72,19 @@ constexpr const dodgems_track_size DodgemsTrackSize(track_type_t type)
     return { 0, 0, 0, 0 };
 }
 
+using TrackComputeFunction = int32_t (*)(const int16_t);
 struct TrackElementDescriptor
 {
-    rct_string_id Description;
+    StringId Description;
     rct_track_coordinates Coordinates;
 
     rct_preview_track* Block;
     uint8_t PieceLength;
     track_curve_chain CurveChain;
     track_type_t AlternativeType;
-    money32 Price;
+    // Price Modifier should be used as in the following calculation:
+    // (RideTrackPrice * TED::PriceModifier) / 65536
+    uint32_t PriceModifier;
     track_type_t MirrorElement;
     uint32_t HeightMarkerPositions;
     uint16_t Flags;
@@ -91,6 +94,9 @@ struct TrackElementDescriptor
 
     rct_trackdefinition Definition;
     uint8_t SpinFunction;
+
+    TrackComputeFunction VerticalFactor;
+    TrackComputeFunction LateralFactor;
 };
 
 namespace OpenRCT2

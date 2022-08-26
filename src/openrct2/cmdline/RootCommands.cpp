@@ -23,7 +23,7 @@
 #include "../object/ObjectRepository.h"
 #include "../park/ParkFile.h"
 #include "../platform/Crash.h"
-#include "../platform/Platform2.h"
+#include "../platform/Platform.h"
 #include "../scripting/ScriptEngine.h"
 #include "CommandLine.hpp"
 
@@ -96,7 +96,7 @@ static exitcode_t HandleCommandJoin(CommandLineArgEnumerator * enumerator);
 static exitcode_t HandleCommandSetRCT2(CommandLineArgEnumerator * enumerator);
 static exitcode_t HandleCommandScanObjects(CommandLineArgEnumerator * enumerator);
 
-#if defined(_WIN32) && !defined(__MINGW32__)
+#if defined(_WIN32)
 
 static bool _removeShell = false;
 
@@ -133,7 +133,7 @@ const CommandLineCommand CommandLine::RootCommands[]
     DefineCommand("scan-objects", "<path>",             StandardOptions, HandleCommandScanObjects),
     DefineCommand("handle-uri", "openrct2://.../",      StandardOptions, CommandLine::HandleCommandUri),
 
-#if defined(_WIN32) && !defined(__MINGW32__)
+#if defined(_WIN32)
     DefineCommand("register-shell", "", RegisterShellOptions, HandleCommandRegisterShell),
 #endif
 
@@ -144,6 +144,7 @@ const CommandLineCommand CommandLine::RootCommands[]
     DefineSubCommand("benchspritesort", CommandLine::BenchSpriteSortCommands  ),
     DefineSubCommand("benchsimulate",   CommandLine::BenchUpdateCommands      ),
     DefineSubCommand("simulate",        CommandLine::SimulateCommands         ),
+    DefineSubCommand("parkinfo",        CommandLine::ParkInfoCommands         ),
     CommandTableEnd
 };
 
@@ -153,7 +154,7 @@ const CommandLineExample CommandLine::RootExamples[]
     { "./SnowyPark.sc6",                              "install and open a scenario"            },
     { "./ShuttleLoop.td6",                            "install a track"                        },
 #ifndef DISABLE_HTTP
-    { "https://openrct2.io/files/SnowyPark.sv6", "download and open a saved park"         },
+    { "https://example.org/files/ExamplePark.sv6", "download and open a saved park"         },
 #endif
 #ifndef DISABLE_NETWORK
     { "host ./my_park.sv6 --port 11753 --headless",   "run a headless server for a saved park" },
@@ -211,12 +212,12 @@ exitcode_t CommandLine::HandleCommandDefault()
 
     if (!_rct1DataPath.empty())
     {
-        gCustomRCT1DataPath = _rct1DataPath;
+        gCustomRCT1DataPath = Path::GetAbsolute(_rct1DataPath);
     }
 
     if (!_rct2DataPath.empty())
     {
-        gCustomRCT2DataPath = _rct2DataPath;
+        gCustomRCT2DataPath = Path::GetAbsolute(_rct2DataPath);
     }
 
     if (!_password.empty())
@@ -356,7 +357,7 @@ static exitcode_t HandleCommandSetRCT2(CommandLineArgEnumerator* enumerator)
     // Check if g1.dat exists (naive but good check)
     Console::WriteLine("Checking g1.dat...");
 
-    auto pathG1Check = Path::Combine(path, "Data", "g1.dat");
+    auto pathG1Check = Path::Combine(path, u8"Data", u8"g1.dat");
     if (!File::Exists(pathG1Check))
     {
         Console::Error::WriteLine("RCT2 path not valid.");
@@ -400,7 +401,7 @@ static exitcode_t HandleCommandScanObjects([[maybe_unused]] CommandLineArgEnumer
     return EXITCODE_OK;
 }
 
-#if defined(_WIN32) && !defined(__MINGW32__)
+#if defined(_WIN32)
 static exitcode_t HandleCommandRegisterShell([[maybe_unused]] CommandLineArgEnumerator* enumerator)
 {
     exitcode_t result = CommandLine::HandleCommandDefault();
@@ -419,7 +420,7 @@ static exitcode_t HandleCommandRegisterShell([[maybe_unused]] CommandLineArgEnum
     }
     return EXITCODE_OK;
 }
-#endif // defined(_WIN32) && !defined(__MINGW32__)
+#endif // defined(_WIN32)
 
 static void PrintAbout()
 {
@@ -458,6 +459,13 @@ static void PrintVersion()
     Console::WriteLine();
     Console::WriteFormat("Minimum park file version: %d", OpenRCT2::PARK_FILE_MIN_VERSION);
     Console::WriteLine();
+#ifdef USE_BREAKPAD
+    Console::WriteFormat("With breakpad support enabled");
+    Console::WriteLine();
+#else
+    Console::WriteFormat("Breakpad support disabled");
+    Console::WriteLine();
+#endif
 }
 
 static void PrintLaunchInformation()
@@ -471,8 +479,6 @@ static void PrintLaunchInformation()
     Console::WriteFormat("%s", buffer);
     Console::WriteLine();
     Console::WriteFormat("%s (%s)", OPENRCT2_PLATFORM, OPENRCT2_ARCHITECTURE);
-    Console::WriteLine();
-    Console::WriteFormat("@ %s", OPENRCT2_CUSTOM_INFO);
     Console::WriteLine();
     Console::WriteLine();
 

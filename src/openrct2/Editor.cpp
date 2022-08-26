@@ -18,11 +18,13 @@
 #include "ParkImporter.h"
 #include "actions/LandBuyRightsAction.h"
 #include "actions/LandSetRightsAction.h"
+#include "actions/ResultWithMessage.h"
 #include "audio/audio.h"
 #include "core/Path.hpp"
 #include "entity/EntityList.h"
 #include "entity/EntityRegistry.h"
 #include "entity/Guest.h"
+#include "entity/PatrolArea.h"
 #include "entity/Staff.h"
 #include "interface/Viewport.h"
 #include "interface/Window_internal.h"
@@ -78,12 +80,22 @@ namespace Editor
         auto& objectRepository = context->GetObjectRepository();
         objectRepository.LoadOrConstruct(localisationService.GetCurrentLanguage());
 
+        Audio::LoadAudioObjects();
+
         // Reset loaded objects to just defaults
         // Load minimum required objects (like surface and edge)
         for (const auto& entry : MinimumRequiredObjects)
         {
             objectManager.LoadObject(entry);
         }
+    }
+
+    static rct_window* OpenEditorWindows()
+    {
+        auto* main = context_open_window(WindowClass::MainWindow);
+        context_open_window(WindowClass::TopToolbar);
+        context_open_window_view(WV_EDITOR_BOTTOM_TOOLBAR);
+        return main;
     }
 
     /**
@@ -94,13 +106,13 @@ namespace Editor
     {
         OpenRCT2::Audio::StopAll();
         object_list_load();
-        OpenRCT2::GetContext()->GetGameState()->InitAll(150);
+        OpenRCT2::GetContext()->GetGameState()->InitAll(DEFAULT_MAP_SIZE);
         gScreenFlags = SCREEN_FLAGS_SCENARIO_EDITOR;
         gEditorStep = EditorStep::ObjectSelection;
         gParkFlags |= PARK_FLAGS_SHOW_REAL_GUEST_NAMES;
         gScenarioCategory = SCENARIO_CATEGORY_OTHER;
         viewport_init_all();
-        rct_window* mainWindow = context_open_window_view(WV_EDITOR_MAIN);
+        rct_window* mainWindow = OpenEditorWindows();
         mainWindow->SetLocation(TileCoordsXYZ{ 75, 75, 14 }.ToCoordsXYZ());
         load_palette();
         gScreenAge = 0;
@@ -114,7 +126,7 @@ namespace Editor
     void ConvertSaveToScenario()
     {
         tool_cancel();
-        auto intent = Intent(WC_LOADSAVE);
+        auto intent = Intent(WindowClass::Loadsave);
         intent.putExtra(INTENT_EXTRA_LOADSAVE_TYPE, LOADSAVETYPE_LOAD | LOADSAVETYPE_GAME);
         intent.putExtra(INTENT_EXTRA_CALLBACK, reinterpret_cast<void*>(ConvertSaveToScenarioCallback));
         context_open_intent(&intent);
@@ -132,28 +144,13 @@ namespace Editor
             return;
         }
 
-        if (gParkFlags & PARK_FLAGS_NO_MONEY)
-        {
-            gParkFlags |= PARK_FLAGS_NO_MONEY_SCENARIO;
-        }
-        else
-        {
-            gParkFlags &= ~PARK_FLAGS_NO_MONEY_SCENARIO;
-        }
-        gParkFlags |= PARK_FLAGS_NO_MONEY;
-
-        climate_reset(gClimate);
-
-        // Clear the scenario completion status
-        gParkFlags &= ~PARK_FLAGS_SCENARIO_COMPLETE_NAME_INPUT;
-        gScenarioCompletedCompanyValue = MONEY64_UNDEFINED;
+        scenario_reset();
 
         gScreenFlags = SCREEN_FLAGS_SCENARIO_EDITOR;
         gEditorStep = EditorStep::ObjectiveSelection;
         gScenarioCategory = SCENARIO_CATEGORY_OTHER;
         viewport_init_all();
-        News::InitQueue();
-        context_open_window_view(WV_EDITOR_MAIN);
+        OpenEditorWindows();
         FinaliseMainView();
         gScreenAge = 0;
     }
@@ -170,11 +167,11 @@ namespace Editor
 
         object_manager_unload_all_objects();
         object_list_load();
-        OpenRCT2::GetContext()->GetGameState()->InitAll(150);
+        OpenRCT2::GetContext()->GetGameState()->InitAll(DEFAULT_MAP_SIZE);
         SetAllLandOwned();
         gEditorStep = EditorStep::ObjectSelection;
         viewport_init_all();
-        rct_window* mainWindow = context_open_window_view(WV_EDITOR_MAIN);
+        rct_window* mainWindow = OpenEditorWindows();
         mainWindow->SetLocation(TileCoordsXYZ{ 75, 75, 14 }.ToCoordsXYZ());
         load_palette();
     }
@@ -191,11 +188,11 @@ namespace Editor
 
         object_manager_unload_all_objects();
         object_list_load();
-        OpenRCT2::GetContext()->GetGameState()->InitAll(150);
+        OpenRCT2::GetContext()->GetGameState()->InitAll(DEFAULT_MAP_SIZE);
         SetAllLandOwned();
         gEditorStep = EditorStep::ObjectSelection;
         viewport_init_all();
-        rct_window* mainWindow = context_open_window_view(WV_EDITOR_MAIN);
+        rct_window* mainWindow = OpenEditorWindows();
         mainWindow->SetLocation(TileCoordsXYZ{ 75, 75, 14 }.ToCoordsXYZ());
         load_palette();
     }
@@ -206,9 +203,8 @@ namespace Editor
      */
     static void SetAllLandOwned()
     {
-        int32_t mapSize = gMapSize;
-
-        MapRange range = { 64, 64, (mapSize - 3) * 32, (mapSize - 3) * 32 };
+        MapRange range = { 2 * COORDS_XY_STEP, 2 * COORDS_XY_STEP, (gMapSize.x - 3) * COORDS_XY_STEP,
+                           (gMapSize.y - 3) * COORDS_XY_STEP };
         auto landSetRightsAction = LandSetRightsAction(range, LandSetRightSetting::SetForSale);
         landSetRightsAction.SetFlags(GAME_COMMAND_FLAG_NO_SPEND);
         GameActions::Execute(&landSetRightsAction);
@@ -258,7 +254,7 @@ namespace Editor
         gScreenAge = 0;
         gScreenFlags = SCREEN_FLAGS_SCENARIO_EDITOR;
         viewport_init_all();
-        context_open_window_view(WV_EDITOR_MAIN);
+        OpenEditorWindows();
         FinaliseMainView();
         return true;
     }
@@ -272,7 +268,7 @@ namespace Editor
         gScreenAge = 0;
         gScreenFlags = SCREEN_FLAGS_SCENARIO_EDITOR;
         viewport_init_all();
-        context_open_window_view(WV_EDITOR_MAIN);
+        OpenEditorWindows();
         FinaliseMainView();
         return true;
     }
@@ -302,7 +298,7 @@ namespace Editor
         gScreenAge = 0;
         gScreenFlags = SCREEN_FLAGS_SCENARIO_EDITOR;
         viewport_init_all();
-        context_open_window_view(WV_EDITOR_MAIN);
+        OpenEditorWindows();
         FinaliseMainView();
         return true;
     }
@@ -323,7 +319,7 @@ namespace Editor
             gScreenAge = 0;
             gScreenFlags = SCREEN_FLAGS_SCENARIO_EDITOR;
             viewport_init_all();
-            context_open_window_view(WV_EDITOR_MAIN);
+            OpenEditorWindows();
             FinaliseMainView();
             return true;
         }
@@ -351,21 +347,13 @@ namespace Editor
         }
 
         ResetAllEntities();
-        staff_reset_modes();
+        UpdateConsolidatedPatrolAreas();
         gNumGuestsInPark = 0;
         gNumGuestsHeadingForPark = 0;
         gNumGuestsInParkLastWeek = 0;
         gGuestChangeModifier = 0;
         if (fromSave)
         {
-            if (gParkFlags & PARK_FLAGS_NO_MONEY)
-            {
-                gParkFlags |= PARK_FLAGS_NO_MONEY_SCENARIO;
-            }
-            else
-            {
-                gParkFlags &= ~PARK_FLAGS_NO_MONEY_SCENARIO;
-            }
             gParkFlags |= PARK_FLAGS_NO_MONEY;
 
             if (gParkEntranceFee == 0)
@@ -380,14 +368,14 @@ namespace Editor
             gParkFlags &= ~PARK_FLAGS_SPRITES_INITIALISED;
 
             gGuestInitialCash = std::clamp(
-                gGuestInitialCash, static_cast<money16>(MONEY(10, 00)), static_cast<money16>(MAX_ENTRANCE_FEE));
+                gGuestInitialCash, static_cast<money16>(10.00_GBP), static_cast<money16>(MAX_ENTRANCE_FEE));
 
             gInitialCash = std::min<money64>(gInitialCash, 100000);
             finance_reset_cash_to_initial();
 
-            gBankLoan = std::clamp<money64>(gBankLoan, MONEY(0, 00), MONEY(5000000, 00));
+            gBankLoan = std::clamp<money64>(gBankLoan, 0.00_GBP, 5000000.00_GBP);
 
-            gMaxBankLoan = std::clamp<money64>(gMaxBankLoan, MONEY(0, 00), MONEY(5000000, 00));
+            gMaxBankLoan = std::clamp<money64>(gMaxBankLoan, 0.00_GBP, 5000000.00_GBP);
 
             gBankLoanInterestRate = std::clamp<uint8_t>(gBankLoanInterestRate, 5, 80);
         }
@@ -411,12 +399,12 @@ namespace Editor
         switch (gEditorStep)
         {
             case EditorStep::ObjectSelection:
-                if (window_find_by_class(WC_EDITOR_OBJECT_SELECTION) != nullptr)
+                if (window_find_by_class(WindowClass::EditorObjectSelection) != nullptr)
                 {
                     return;
                 }
 
-                if (window_find_by_class(WC_INSTALL_TRACK) != nullptr)
+                if (window_find_by_class(WindowClass::InstallTrack) != nullptr)
                 {
                     return;
                 }
@@ -426,31 +414,31 @@ namespace Editor
                     object_manager_unload_all_objects();
                 }
 
-                context_open_window(WC_EDITOR_OBJECT_SELECTION);
+                context_open_window(WindowClass::EditorObjectSelection);
                 break;
             case EditorStep::InventionsListSetUp:
-                if (window_find_by_class(WC_EDITOR_INVENTION_LIST) != nullptr)
+                if (window_find_by_class(WindowClass::EditorInventionList) != nullptr)
                 {
                     return;
                 }
 
-                context_open_window(WC_EDITOR_INVENTION_LIST);
+                context_open_window(WindowClass::EditorInventionList);
                 break;
             case EditorStep::OptionsSelection:
-                if (window_find_by_class(WC_EDITOR_SCENARIO_OPTIONS) != nullptr)
+                if (window_find_by_class(WindowClass::EditorScenarioOptions) != nullptr)
                 {
                     return;
                 }
 
-                context_open_window(WC_EDITOR_SCENARIO_OPTIONS);
+                context_open_window(WindowClass::EditorScenarioOptions);
                 break;
             case EditorStep::ObjectiveSelection:
-                if (window_find_by_class(WC_EDITOR_OBJECTIVE_OPTIONS) != nullptr)
+                if (window_find_by_class(WindowClass::EditorObjectiveOptions) != nullptr)
                 {
                     return;
                 }
 
-                context_open_window(WC_EDITOR_OBJECTIVE_OPTIONS);
+                context_open_window(WindowClass::EditorObjectiveOptions);
                 break;
             case EditorStep::LandscapeEditor:
             case EditorStep::SaveScenario:
@@ -481,7 +469,7 @@ namespace Editor
      *
      *  rct2: 0x006AB9B8
      */
-    std::pair<ObjectType, rct_string_id> CheckObjectSelection()
+    std::pair<ObjectType, StringId> CheckObjectSelection()
     {
         bool isTrackDesignerManager = gScreenFlags & (SCREEN_FLAGS_TRACK_DESIGNER | SCREEN_FLAGS_TRACK_MANAGER);
 
@@ -505,6 +493,19 @@ namespace Editor
         {
             return { ObjectType::Ride, STR_AT_LEAST_ONE_RIDE_OBJECT_MUST_BE_SELECTED };
         }
+        if (!editor_check_object_group_at_least_one_selected(ObjectType::Station))
+        {
+            return { ObjectType::Station, STR_AT_LEAST_ONE_STATION_OBJECT_MUST_BE_SELECTED };
+        }
+
+        if (!editor_check_object_group_at_least_one_selected(ObjectType::TerrainSurface))
+        {
+            return { ObjectType::TerrainSurface, STR_AT_LEAST_ONE_TERRAIN_SURFACE_OBJECT_MUST_BE_SELECTED };
+        }
+        if (!editor_check_object_group_at_least_one_selected(ObjectType::TerrainEdge))
+        {
+            return { ObjectType::TerrainEdge, STR_AT_LEAST_ONE_TERRAIN_EDGE_OBJECT_MUST_BE_SELECTED };
+        }
 
         if (!isTrackDesignerManager)
         {
@@ -526,7 +527,7 @@ namespace Editor
      *
      *  rct2: 0x0066FEAC
      */
-    std::pair<bool, rct_string_id> CheckPark()
+    ResultWithMessage CheckPark()
     {
         int32_t parkSize = park_calculate_size();
         if (parkSize == 0)

@@ -5,15 +5,31 @@ if (CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
 endif ()
 
 # Options
-option(DISABLE_OPENGL "Disable OpenGL support.")
+option(DISABLE_FLAC     "Disable FLAC support.")
+option(DISABLE_VORBIS   "Disable OGG/VORBIS support.")
+option(DISABLE_OPENGL   "Disable OpenGL support.")
 
 # Third party libraries
 if (MSVC)
     find_package(SDL2 REQUIRED)
     find_library(SPEEX_LDFLAGS libspeexdsp)
+    if (NOT DISABLE_FLAC)
+        find_library(SPEEX_LDFLAGS libflac)
+    endif ()
+    if (NOT DISABLE_VORBIS)
+        find_library(SPEEX_LDFLAGS libogg)
+        find_library(SPEEX_LDFLAGS libvorbis)
+    endif ()
 else ()
     PKG_CHECK_MODULES(SDL2 REQUIRED IMPORTED_TARGET sdl2)
     PKG_CHECK_MODULES(SPEEX REQUIRED IMPORTED_TARGET speexdsp)
+    if (NOT DISABLE_FLAC)
+        PKG_CHECK_MODULES(FLAC REQUIRED IMPORTED_TARGET flac)
+    endif ()
+    if (NOT DISABLE_VORBIS)
+        PKG_CHECK_MODULES(OGG REQUIRED IMPORTED_TARGET ogg)
+        PKG_CHECK_MODULES(VORBISFILE REQUIRED IMPORTED_TARGET vorbisfile)
+    endif ()
 endif ()
 
 if (NOT DISABLE_OPENGL)
@@ -35,17 +51,6 @@ file(GLOB_RECURSE OPENRCT2_UI_HEADERS
 if (APPLE)
     file(GLOB_RECURSE OPENRCT2_UI_MM_SOURCES "${CMAKE_CURRENT_LIST_DIR}/*.mm")
     set_source_files_properties(${OPENRCT2_UI_MM_SOURCES} PROPERTIES COMPILE_FLAGS "-x objective-c++ -fmodules")
-    if ("${CMAKE_OSX_ARCHITECTURES}" MATCHES "arm64")
-        # cross-compilation workaround for SDL2
-        # This has been addressed upstream in https://github.com/libsdl-org/SDL/commit/bf1d7a3a15a6c090188974bec8ca84eb1903d4f7
-        # Remove this workaround after:
-        # 1) a new SDL release is made containing that fix
-        # 2) The vcpkg port is updated to use that release
-        # 3) A new Dependencies release is made with that latest vcpkg version
-        # 4) That new release is used in this build
-        set(SDL_DISABLE_IMMINTRIN_H "-DSDL_DISABLE_IMMINTRIN_H")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SDL_DISABLE_IMMINTRIN_H}")
-    endif ()
 endif ()
 
 # Outputs
@@ -66,6 +71,22 @@ else ()
 endif ()
 target_link_platform_libraries(${PROJECT_NAME})
 
+if (NOT DISABLE_FLAC)
+    if (NOT MSVC AND NOT WIN32)
+        target_link_libraries(${PROJECT_NAME} PkgConfig::FLAC)
+    else ()
+        target_link_libraries(${PROJECT_NAME} ${FLAC_LDFLAGS})
+    endif ()
+endif ()
+
+if (NOT DISABLE_VORBIS)
+    if (NOT MSVC AND NOT WIN32)
+        target_link_libraries(${PROJECT_NAME} PkgConfig::OGG PkgConfig::VORBISFILE)
+    else ()
+        target_link_libraries(${PROJECT_NAME} ${OGG_LDFLAGS} ${VORBISFILE_LDFLAGS})
+    endif ()
+endif ()
+
 if (NOT DISABLE_OPENGL)
     if (WIN32)
         target_link_libraries(${PROJECT_NAME} opengl32)
@@ -78,7 +99,10 @@ endif ()
 
 # Includes
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/.."
-                                              ${SPEEX_INCLUDE_DIRS})
+                                              ${SPEEX_INCLUDE_DIRS}
+                                              ${OGG_INCLUDE_DIRS}
+                                              ${VORBIS_INCLUDE_DIRS}
+                                              ${FLAC_INCLUDE_DIRS})
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${SDL2_INCLUDE_DIRS}
                                                      "${CMAKE_CURRENT_LIST_DIR}/../thirdparty")
 
@@ -113,6 +137,12 @@ if (MSVC)
 endif ()
 
 # Defines
+if (DISABLE_FLAC)
+    add_definitions(-DDISABLE_FLAC)
+endif ()
+if (DISABLE_VORBIS)
+    add_definitions(-DDISABLE_VORBIS)
+endif ()
 if (DISABLE_OPENGL)
     add_definitions(-DDISABLE_OPENGL)
 else ()

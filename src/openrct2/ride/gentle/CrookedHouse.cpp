@@ -11,6 +11,7 @@
 #include "../../interface/Viewport.h"
 #include "../../paint/Paint.h"
 #include "../../paint/Supports.h"
+#include "../../ride/Vehicle.h"
 #include "../Ride.h"
 #include "../RideEntry.h"
 #include "../Track.h"
@@ -52,9 +53,11 @@ static constexpr const rct_crooked_house_bound_box crooked_house_data[] = {
 static void PaintCrookedHouseStructure(
     paint_session& session, uint8_t direction, int32_t x_offset, int32_t y_offset, uint32_t segment, int32_t height)
 {
-    const TileElement* original_tile_element = static_cast<const TileElement*>(session.CurrentlyDrawnItem);
+    const auto* tileElement = session.CurrentlyDrawnTileElement;
+    if (tileElement == nullptr)
+        return;
 
-    auto ride = get_ride(original_tile_element->AsTrack()->GetRideIndex());
+    auto ride = get_ride(tileElement->AsTrack()->GetRideIndex());
     if (ride == nullptr)
         return;
 
@@ -68,16 +71,18 @@ static void PaintCrookedHouseStructure(
         if (vehicle != nullptr)
         {
             session.InteractionType = ViewportInteractionItem::Entity;
-            session.CurrentlyDrawnItem = vehicle;
+            session.CurrentlyDrawnEntity = vehicle;
         }
     }
 
     const auto& boundBox = crooked_house_data[segment];
     auto imageTemplate = ImageId::FromUInt32(session.TrackColours[SCHEME_MISC]);
-    auto imageIndex = rideEntry->vehicles[0].base_image_id + direction;
+    auto imageIndex = rideEntry->Cars[0].base_image_id + direction;
     PaintAddImageAsParent(
         session, imageTemplate.WithIndex(imageIndex), { x_offset, y_offset, height + 3 }, { boundBox.length, 127 },
         { boundBox.offset, height + 3 });
+
+    session.CurrentlyDrawnEntity = nullptr;
 }
 
 static void PaintCrookedHouse(

@@ -15,10 +15,11 @@
 #include <openrct2/OpenRCT2.h>
 #include <openrct2/PlatformEnvironment.h>
 #include <openrct2/Version.h>
+#include <openrct2/core/FileSystem.hpp>
 #include <openrct2/core/String.hpp>
 #include <openrct2/drawing/Drawing.h>
 #include <openrct2/localisation/Localisation.h>
-#include <openrct2/platform/platform.h>
+#include <openrct2/platform/Platform.h>
 #include <openrct2/ui/UiContext.h>
 #include <openrct2/util/Util.h>
 #include <vector>
@@ -37,7 +38,7 @@ enum {
 
 static constexpr const int32_t WW = 500;
 static constexpr const int32_t WH = 400;
-static constexpr const rct_string_id WINDOW_TITLE = STR_CHANGELOG_TITLE;
+static constexpr const StringId WINDOW_TITLE = STR_CHANGELOG_TITLE;
 constexpr int32_t MIN_WW = 300;
 constexpr int32_t MIN_WH = 250;
 
@@ -65,12 +66,7 @@ public:
     const std::string GetChangelogText()
     {
         auto path = GetChangelogPath();
-#if defined(_WIN32) && !defined(__MINGW32__)
-        auto pathW = String::ToWideChar(path);
-        auto fs = std::ifstream(pathW, std::ios::in);
-#else
-        auto fs = std::ifstream(path, std::ios::in);
-#endif
+        auto fs = std::ifstream(fs::u8path(path), std::ios::in);
         if (!fs.is_open())
         {
             throw std::runtime_error("Unable to open " + path);
@@ -85,8 +81,6 @@ public:
      */
     bool SetPersonality(int personality)
     {
-        enabled_widgets = (1ULL << WIDX_CLOSE);
-
         switch (personality)
         {
             case WV_NEW_VERSION_INFO:
@@ -96,7 +90,6 @@ public:
                 }
                 _personality = WV_NEW_VERSION_INFO;
                 NewVersionProcessInfo();
-                enabled_widgets |= (1ULL << WIDX_OPEN_URL);
                 widgets[WIDX_OPEN_URL].type = WindowWidgetType::Button;
                 return true;
 
@@ -118,7 +111,7 @@ public:
     {
         widgets = _windowChangelogWidgets;
 
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
         min_width = MIN_WW;
         min_height = MIN_WH;
         max_width = MIN_WW;
@@ -167,7 +160,7 @@ public:
         widgets[WIDX_OPEN_URL].top = height - 19;
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         switch (widgetIndex)
         {
@@ -296,7 +289,7 @@ private:
     {
         std::string::size_type pos = 0;
         std::string::size_type prev = 0;
-        while ((pos = text.find("\n", prev)) != std::string::npos)
+        while ((pos = text.find('\n', prev)) != std::string::npos)
         {
             _changelogLines.push_back(text.substr(prev, pos - prev));
             prev = pos + 1;
@@ -316,7 +309,7 @@ private:
 
 rct_window* WindowChangelogOpen(int personality)
 {
-    auto* window = window_bring_to_front_by_class(WC_CHANGELOG);
+    auto* window = window_bring_to_front_by_class(WindowClass::Changelog);
     if (window == nullptr)
     {
         // Create a new centred window
@@ -326,7 +319,7 @@ rct_window* WindowChangelogOpen(int personality)
         int32_t height = (screenHeight * 4) / 5;
 
         auto pos = ChangelogWindow::GetCentrePositionForNewWindow(width, height);
-        auto* newWindow = WindowCreate<ChangelogWindow>(WC_CHANGELOG, pos, width, height, WF_RESIZABLE);
+        auto* newWindow = WindowCreate<ChangelogWindow>(WindowClass::Changelog, pos, width, height, WF_RESIZABLE);
         newWindow->SetPersonality(personality);
         return newWindow;
     }

@@ -29,7 +29,7 @@
 #include "../localisation/LocalisationService.h"
 #include "../object/Object.h"
 #include "../park/Legacy.h"
-#include "../platform/platform.h"
+#include "../platform/Platform.h"
 #include "../rct12/SawyerChunkReader.h"
 #include "../rct12/SawyerChunkWriter.h"
 #include "../scenario/ScenarioRepository.h"
@@ -79,7 +79,7 @@ class ObjectFileIndex final : public FileIndex<ObjectRepositoryItem>
 {
 private:
     static constexpr uint32_t MAGIC_NUMBER = 0x5844494F; // OIDX
-    static constexpr uint16_t VERSION = 28;
+    static constexpr uint16_t VERSION = 29;
     static constexpr auto PATTERN = "*.dat;*.pob;*.json;*.parkobj";
 
     IObjectRepository& _objectRepository;
@@ -97,7 +97,7 @@ public:
     }
 
 public:
-    std::tuple<bool, ObjectRepositoryItem> Create([[maybe_unused]] int32_t language, const std::string& path) const override
+    std::optional<ObjectRepositoryItem> Create([[maybe_unused]] int32_t language, const std::string& path) const override
     {
         std::unique_ptr<Object> object;
         auto extension = Path::GetExtension(path);
@@ -113,6 +113,7 @@ public:
         {
             object = ObjectFactory::CreateObjectFromLegacyFile(_objectRepository, path.c_str(), false);
         }
+
         if (object != nullptr)
         {
             ObjectRepositoryItem item = {};
@@ -125,13 +126,13 @@ public:
             item.Authors = object->GetAuthors();
             item.Sources = object->GetSourceGames();
             object->SetRepositoryItem(&item);
-            return std::make_tuple(true, item);
+            return item;
         }
-        return std::make_tuple(false, ObjectRepositoryItem());
+        return std::nullopt;
     }
 
 protected:
-    void Serialise(DataSerialiser& ds, ObjectRepositoryItem& item) const override
+    void Serialise(DataSerialiser& ds, const ObjectRepositoryItem& item) const override
     {
         ds << item.Type;
         ds << item.Generation;
@@ -351,25 +352,6 @@ public:
         }
     }
 
-    void WritePackedObjects(IStream* stream, std::vector<const ObjectRepositoryItem*>& objects) override
-    {
-        log_verbose("packing %u objects", objects.size());
-        for (const auto& object : objects)
-        {
-            Guard::ArgumentNotNull(object);
-
-            log_verbose("exporting object %.8s", object->ObjectEntry.name);
-            if (IsObjectCustom(object))
-            {
-                WritePackedObject(stream, &object->ObjectEntry);
-            }
-            else
-            {
-                log_warning("Refusing to pack vanilla/expansion object \"%s\"", object->ObjectEntry.name);
-            }
-        }
-    }
-
 private:
     void ClearItems()
     {
@@ -462,11 +444,9 @@ private:
     void ScanObject(const std::string& path)
     {
         auto language = LocalisationService_GetCurrentLanguage();
-        auto result = _fileIndex.Create(language, path);
-        if (std::get<0>(result))
+        if (auto result = _fileIndex.Create(language, path); result.has_value())
         {
-            auto ori = std::get<1>(result);
-            AddItem(ori);
+            AddItem(result.value());
         }
     }
 
@@ -585,7 +565,7 @@ private:
 
         // Find a unique file name
         auto fileName = GetFileNameForNewObject(generation, name);
-        auto extension = (generation == ObjectGeneration::DAT ? ".DAT" : ".parkobj");
+        auto extension = (generation == ObjectGeneration::DAT ? u8".DAT" : u8".parkobj");
         auto fullPath = Path::Combine(userObjPath, fileName + extension);
         auto counter = 1U;
         while (File::Exists(fullPath))
@@ -618,7 +598,7 @@ private:
             }
 
             // Convert to UTF-8 filename
-            return String::Convert(normalisedName, CODE_PAGE::CP_1252, CODE_PAGE::CP_UTF8);
+            return String::ConvertToUtf8(normalisedName, OpenRCT2::CodePage::CP_1252);
         }
         else
         {
@@ -659,14 +639,6 @@ std::unique_ptr<IObjectRepository> CreateObjectRepository(const std::shared_ptr<
 bool IsObjectCustom(const ObjectRepositoryItem* object)
 {
     Guard::ArgumentNotNull(object);
-
-    // Do not count our new object types as custom yet, otherwise the game
-    // will try to pack them into saved games.
-    if (object->Type > ObjectType::ScenarioText)
-    {
-        return false;
-    }
-
     switch (object->GetFirstSourceGame())
     {
         case ObjectSourceGame::RCT1:
@@ -680,18 +652,6 @@ bool IsObjectCustom(const ObjectRepositoryItem* object)
         default:
             return true;
     }
-}
-
-const rct_object_entry* object_list_find(rct_object_entry* entry)
-{
-    const rct_object_entry* result = nullptr;
-    auto& objRepo = GetContext()->GetObjectRepository();
-    auto item = objRepo.FindObject(entry);
-    if (item != nullptr)
-    {
-        result = &item->ObjectEntry;
-    }
-    return result;
 }
 
 std::unique_ptr<Object> object_repository_load_object(const rct_object_entry* objectEntry)
@@ -712,7 +672,7 @@ std::unique_ptr<Object> object_repository_load_object(const rct_object_entry* ob
 
 void scenario_translate(scenario_index_entry* scenarioEntry)
 {
-    rct_string_id localisedStringIds[3];
+    StringId localisedStringIds[3];
     if (language_get_localised_scenario_strings(scenarioEntry->name, localisedStringIds))
     {
         if (localisedStringIds[0] != STR_NONE)

@@ -20,7 +20,7 @@ constexpr const RideTypeDescriptor RiverRaftsRTD =
     SET_FIELD(AlternateType, RIDE_TYPE_NULL),
     SET_FIELD(Category, RIDE_CATEGORY_WATER),
     SET_FIELD(EnabledTrackPieces, {TRACK_STRAIGHT, TRACK_STATION_END, TRACK_S_BEND, TRACK_CURVE}),
-    SET_FIELD(ExtraTrackPieces, {TRACK_SLOPE, TRACK_SLOPE_STEEP, TRACK_ON_RIDE_PHOTO}),
+    SET_FIELD(ExtraTrackPieces, {TRACK_SLOPE, TRACK_SLOPE_STEEP_DOWN, TRACK_ON_RIDE_PHOTO}),
     SET_FIELD(CoveredTrackPieces, {}),
     SET_FIELD(StartTrackPiece, TrackElemType::EndStation),
     SET_FIELD(TrackPaintFunction, get_track_paint_function_splash_boats),
@@ -43,7 +43,7 @@ constexpr const RideTypeDescriptor RiverRaftsRTD =
     SET_FIELD(RatingsCalculationFunction, ride_ratings_calculate_river_rafts),
     SET_FIELD(RatingsMultipliers, { 80, 34, 6 }),
     SET_FIELD(UpkeepCosts, { 50, 20, 0, 9, 0, 10 }),
-    SET_FIELD(BuildCosts, { 40, 5, 30, }),
+    SET_FIELD(BuildCosts, { 20.00_GBP, 2.50_GBP, 30, }),
     SET_FIELD(DefaultPrices, { 10, 20 }),
     SET_FIELD(DefaultMusic, MUSIC_OBJECT_GENTLE),
     SET_FIELD(PhotoItem, ShopItem::Photo4),
@@ -53,5 +53,6 @@ constexpr const RideTypeDescriptor RiverRaftsRTD =
     )),
     SET_FIELD(ColourPreview, { SPR_RIDE_DESIGN_PREVIEW_RIVER_RAFTS_TRACK, SPR_RIDE_DESIGN_PREVIEW_RIVER_RAFTS_SUPPORTS }),
     SET_FIELD(ColourKey, RideColourKey::Ride),
+    SET_FIELD(Name, "river_rafts"),
 };
 // clang-format on

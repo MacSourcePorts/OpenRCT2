@@ -16,7 +16,7 @@
 #    include <jni.h>
 #    include <openrct2/common.h>
 #    include <openrct2/core/String.hpp>
-#    include <openrct2/platform/platform.h>
+#    include <openrct2/platform/Platform.h>
 #    include <openrct2/ui/UiContext.h>
 #    include <sstream>
 #    include <stdexcept>
@@ -88,9 +88,9 @@ namespace OpenRCT2::Ui
         }
     };
 
-    IPlatformUiContext* CreatePlatformUiContext()
+    std::unique_ptr<IPlatformUiContext> CreatePlatformUiContext()
     {
-        return new AndroidContext();
+        return std::make_unique<AndroidContext>();
     }
 } // namespace OpenRCT2::Ui
 

@@ -20,11 +20,12 @@
 #include "../core/Console.hpp"
 #include "../core/File.h"
 #include "../core/Imaging.h"
+#include "../core/Path.hpp"
 #include "../drawing/Drawing.h"
 #include "../drawing/X8DrawingEngine.h"
 #include "../localisation/Formatter.h"
 #include "../localisation/Localisation.h"
-#include "../platform/Platform2.h"
+#include "../platform/Platform.h"
 #include "../util/Util.h"
 #include "../world/Climate.h"
 #include "../world/Map.h"
@@ -32,6 +33,7 @@
 #include "../world/Surface.h"
 #include "Viewport.h"
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
@@ -42,6 +44,10 @@
 using namespace std::literals::string_literals;
 using namespace OpenRCT2;
 using namespace OpenRCT2::Drawing;
+
+extern CoordsXY gClipSelectionA;
+extern CoordsXY gClipSelectionB;
+extern uint8_t gClipHeight;
 
 uint8_t gScreenshotCountdown = 0;
 
@@ -128,7 +134,7 @@ static std::string screenshot_get_formatted_date_time()
 static std::optional<std::string> screenshot_get_next_path()
 {
     auto screenshotDirectory = screenshot_get_directory();
-    if (!platform_ensure_directory_exists(screenshotDirectory.c_str()))
+    if (!Platform::EnsureDirectoryExists(screenshotDirectory.c_str()))
     {
         log_error("Unable to save screenshots in OpenRCT2 screenshot directory.");
         return std::nullopt;
@@ -206,77 +212,7 @@ std::string screenshot_dump_png_32bpp(int32_t width, int32_t height, const void*
     }
 }
 
-enum class EdgeType
-{
-    LEFT,
-    TOP,
-    RIGHT,
-    BOTTOM
-};
-
-static CoordsXY GetEdgeTile(int32_t mapSize, int32_t rotation, EdgeType edgeType, bool visible)
-{
-    int32_t lower = (visible ? 1 : 0) * 32;
-    int32_t upper = (visible ? mapSize - 2 : mapSize - 1) * 32;
-    switch (edgeType)
-    {
-        default:
-        case EdgeType::LEFT:
-            switch (rotation)
-            {
-                default:
-                case 0:
-                    return { upper, lower };
-                case 1:
-                    return { upper, upper };
-                case 2:
-                    return { lower, upper };
-                case 3:
-                    return { lower, lower };
-            }
-        case EdgeType::TOP:
-            switch (rotation)
-            {
-                default:
-                case 0:
-                    return { lower, lower };
-                case 1:
-                    return { upper, lower };
-                case 2:
-                    return { upper, upper };
-                case 3:
-                    return { lower, upper };
-            }
-        case EdgeType::RIGHT:
-            switch (rotation)
-            {
-                default:
-                case 0:
-                    return { lower, upper };
-                case 1:
-                    return { lower, lower };
-                case 2:
-                    return { upper, lower };
-                case 3:
-                    return { upper, upper };
-            }
-        case EdgeType::BOTTOM:
-            switch (rotation)
-            {
-                default:
-                case 0:
-                    return { upper, upper };
-                case 1:
-                    return { lower, upper };
-                case 2:
-                    return { lower, lower };
-                case 3:
-                    return { upper, lower };
-            }
-    }
-}
-
-static int32_t GetHighestBaseClearanceZ(const CoordsXY& location)
+static int32_t GetHighestBaseClearanceZ(const CoordsXY& location, const bool useViewClipping)
 {
     int32_t z = 0;
     auto element = map_get_first_element_at(location);
@@ -284,6 +220,10 @@ static int32_t GetHighestBaseClearanceZ(const CoordsXY& location)
     {
         do
         {
+            if (useViewClipping && (element->GetBaseZ() > gClipHeight * COORDS_Z_STEP))
+            {
+                continue;
+            }
             z = std::max<int32_t>(z, element->GetBaseZ());
             z = std::max<int32_t>(z, element->GetClearanceZ());
         } while (!(element++)->IsLastForTile());
@@ -291,20 +231,22 @@ static int32_t GetHighestBaseClearanceZ(const CoordsXY& location)
     return z;
 }
 
-static int32_t GetTallestVisibleTileTop(int32_t mapSize, int32_t rotation)
+static int32_t GetTallestVisibleTileTop(
+    int32_t rotation, TileCoordsXY startCoords, TileCoordsXY endCoords, const bool useViewClipping)
 {
-    int32_t minViewY = 0;
-    for (int32_t y = 1; y < mapSize - 1; y++)
+    int32_t minViewY = std::numeric_limits<int32_t>::max();
+    for (int32_t y = startCoords.y; y <= endCoords.y; y++)
     {
-        for (int32_t x = 1; x < mapSize - 1; x++)
+        for (int32_t x = startCoords.x; x <= endCoords.x; x++)
         {
             auto location = TileCoordsXY(x, y).ToCoordsXY();
-            int32_t z = GetHighestBaseClearanceZ(location);
-            int32_t viewY = translate_3d_to_2d_with_z(rotation, CoordsXYZ(location, z)).y;
+            int32_t z = GetHighestBaseClearanceZ(location, useViewClipping);
+            int32_t viewY = translate_3d_to_2d_with_z(rotation, CoordsXYZ(location.ToTileCentre(), z)).y;
             minViewY = std::min(minViewY, viewY);
         }
     }
-    return minViewY - 256;
+    // Some objects have a lower clearance than the actual sprite.
+    return minViewY - 64;
 }
 
 static rct_drawpixelinfo CreateDPI(const rct_viewport& viewport)
@@ -335,30 +277,49 @@ static void ReleaseDPI(rct_drawpixelinfo& dpi)
     dpi.height = 0;
 }
 
-static rct_viewport GetGiantViewport(int32_t mapSize, int32_t rotation, ZoomLevel zoom)
+static rct_viewport GetGiantViewport(int32_t rotation, ZoomLevel zoom)
 {
     // Get the tile coordinates of each corner
-    auto leftTileCoords = GetEdgeTile(mapSize, rotation, EdgeType::LEFT, false);
-    auto rightTileCoords = GetEdgeTile(mapSize, rotation, EdgeType::RIGHT, false);
-    auto bottomTileCoords = GetEdgeTile(mapSize, rotation, EdgeType::BOTTOM, false);
+    const TileCoordsXY cornerCoords[2][4] = {
+        {
+            // Map corners
+            { 1, 1 },
+            { gMapSize.x - 2, gMapSize.y - 2 },
+            { 1, gMapSize.y - 2 },
+            { gMapSize.x - 2, 1 },
+        },
+        {
+            // Horizontal view clipping corners
+            TileCoordsXY{ CoordsXY{ std::max(gClipSelectionA.x, 32), std::max(gClipSelectionA.y, 32) } },
+            TileCoordsXY{ CoordsXY{ std::min(gClipSelectionB.x, (gMapSize.x - 2) * 32),
+                                    std::min(gClipSelectionB.y, (gMapSize.y - 2) * 32) } },
+            TileCoordsXY{ CoordsXY{ std::max(gClipSelectionA.x, 32), std::min(gClipSelectionB.y, (gMapSize.y - 2) * 32) } },
+            TileCoordsXY{ CoordsXY{ std::min(gClipSelectionB.x, (gMapSize.x - 2) * 32), std::max(gClipSelectionA.y, 32) } },
+        },
+    };
 
-    // Centre the coordinates so we don't have a hard crop at the edge of the visible tile
-    leftTileCoords += CoordsXY(16, 16);
-    rightTileCoords += CoordsXY(16, 16);
-    bottomTileCoords += CoordsXY(16, 16);
+    auto* const mainWindow = window_get_main();
+    const auto* const mainViewport = window_get_viewport(mainWindow);
+    const bool useViewClipping = (mainViewport != nullptr && mainViewport->flags & VIEWPORT_FLAG_CLIP_VIEW);
 
     // Calculate the viewport bounds
-    int32_t left = translate_3d_to_2d_with_z(rotation, CoordsXYZ(leftTileCoords, 0)).x;
-    int32_t top = GetTallestVisibleTileTop(mapSize, rotation);
-    int32_t right = translate_3d_to_2d_with_z(rotation, CoordsXYZ(rightTileCoords, 0)).x;
-    int32_t bottom = translate_3d_to_2d_with_z(rotation, CoordsXYZ(bottomTileCoords, 0)).y;
+    auto corners = cornerCoords[useViewClipping ? 1 : 0];
+    auto screenCoords1 = translate_3d_to_2d_with_z(rotation, { corners[0].ToCoordsXY().ToTileCentre(), 0 });
+    auto screenCoords2 = translate_3d_to_2d_with_z(rotation, { corners[1].ToCoordsXY().ToTileCentre(), 0 });
+    auto screenCoords3 = translate_3d_to_2d_with_z(rotation, { corners[2].ToCoordsXY().ToTileCentre(), 0 });
+    auto screenCoords4 = translate_3d_to_2d_with_z(rotation, { corners[3].ToCoordsXY().ToTileCentre(), 0 });
+
+    auto left = std::min({ screenCoords1.x, screenCoords2.x, screenCoords3.x, screenCoords4.x }) - 32;
+    auto top = GetTallestVisibleTileTop(rotation, corners[0], corners[1], useViewClipping);
+    auto bottom = std::max({ screenCoords1.y, screenCoords2.y, screenCoords3.y, screenCoords4.y });
+    auto right = std::max({ screenCoords1.x, screenCoords2.x, screenCoords3.x, screenCoords4.x }) + 32;
 
     rct_viewport viewport{};
     viewport.viewPos = { left, top };
     viewport.view_width = right - left;
     viewport.view_height = bottom - top;
-    viewport.width = viewport.view_width / zoom;
-    viewport.height = viewport.view_height / zoom;
+    viewport.width = zoom.ApplyInversedTo(viewport.view_width);
+    viewport.height = zoom.ApplyInversedTo(viewport.view_height);
     viewport.zoom = zoom;
     return viewport;
 }
@@ -398,7 +359,7 @@ void screenshot_giant()
             zoom = vp->zoom;
         }
 
-        auto viewport = GetGiantViewport(gMapSize, rotation, zoom);
+        auto viewport = GetGiantViewport(rotation, zoom);
         if (vp != nullptr)
         {
             viewport.flags = vp->flags;
@@ -414,9 +375,10 @@ void screenshot_giant()
         WriteDpiToFile(path.value(), &dpi, gPalette);
 
         // Show user that screenshot saved successfully
+        const auto filename = Path::GetFileName(path.value());
         Formatter ft;
-        ft.Add<rct_string_id>(STR_STRING);
-        ft.Add<char*>(path_get_filename(path->c_str()));
+        ft.Add<StringId>(STR_STRING);
+        ft.Add<const utf8*>(filename.c_str());
         context_show_error(STR_SCREENSHOT_SAVED_AS, STR_NONE, ft);
     }
     catch (const std::exception& e)
@@ -462,7 +424,7 @@ static void benchgfx_render_screenshots(const char* inputPath, std::unique_ptr<I
         {
             auto& viewport = viewports[zoomIndex * NUM_ZOOM_LEVELS + rotation];
             auto& dpi = dpis[zoomIndex * NUM_ZOOM_LEVELS + rotation];
-            viewport = GetGiantViewport(gMapSize, rotation, zoom);
+            viewport = GetGiantViewport(rotation, zoom);
             dpi = CreateDPI(viewport);
         }
     }
@@ -528,7 +490,7 @@ int32_t cmdline_for_gfxbench(const char** argv, int32_t argc)
         return -1;
     }
 
-    core_init();
+    Platform::CoreInit();
     int32_t iterationCount = 5;
     if (argc == 2)
     {
@@ -561,12 +523,12 @@ static void ApplyOptions(const ScreenshotOptions* options, rct_viewport& viewpor
 
     if (options->hide_guests)
     {
-        viewport.flags |= VIEWPORT_FLAG_INVISIBLE_PEEPS;
+        viewport.flags |= VIEWPORT_FLAG_HIDE_GUESTS | VIEWPORT_FLAG_HIDE_STAFF;
     }
 
     if (options->hide_sprites)
     {
-        viewport.flags |= VIEWPORT_FLAG_INVISIBLE_SPRITES;
+        viewport.flags |= VIEWPORT_FLAG_HIDE_ENTITIES;
     }
 
     if (options->mowed_grass)
@@ -625,7 +587,7 @@ int32_t cmdline_for_screenshot(const char** argv, int32_t argc, ScreenshotOption
     rct_drawpixelinfo dpi;
     try
     {
-        core_init();
+        Platform::CoreInit();
         bool customLocation = false;
         bool centreMapX = false;
         bool centreMapY = false;
@@ -656,7 +618,7 @@ int32_t cmdline_for_screenshot(const char** argv, int32_t argc, ScreenshotOption
             auto customZoom = static_cast<int8_t>(std::atoi(argv[3]));
             auto zoom = ZoomLevel{ customZoom };
             auto rotation = std::atoi(argv[4]) & 3;
-            viewport = GetGiantViewport(gMapSize, rotation, zoom);
+            viewport = GetGiantViewport(rotation, zoom);
             gCurrentRotation = rotation;
         }
         else
@@ -684,11 +646,11 @@ int32_t cmdline_for_screenshot(const char** argv, int32_t argc, ScreenshotOption
                 customRotation = std::atoi(argv[7]) & 3;
             }
 
-            int32_t mapSize = gMapSize;
+            const auto& mapSize = gMapSize;
             if (resolutionWidth == 0 || resolutionHeight == 0)
             {
-                resolutionWidth = (mapSize * 32 * 2) >> customZoom;
-                resolutionHeight = (mapSize * 32 * 1) >> customZoom;
+                resolutionWidth = (mapSize.x * COORDS_XY_STEP * 2) >> customZoom;
+                resolutionHeight = (mapSize.y * COORDS_XY_STEP * 1) >> customZoom;
 
                 resolutionWidth += 8;
                 resolutionHeight += 128;
@@ -701,9 +663,9 @@ int32_t cmdline_for_screenshot(const char** argv, int32_t argc, ScreenshotOption
             if (customLocation)
             {
                 if (centreMapX)
-                    customX = (mapSize / 2) * 32 + 16;
+                    customX = (mapSize.x / 2) * 32 + 16;
                 if (centreMapY)
-                    customY = (mapSize / 2) * 32 + 16;
+                    customY = (mapSize.y / 2) * 32 + 16;
 
                 int32_t z = tile_element_height({ customX, customY });
                 CoordsXYZ coords3d = { customX, customY, z };
@@ -770,7 +732,7 @@ static std::string ResolveFilenameForCapture(const fs::path& filename)
         return *path;
     }
 
-    auto screenshotDirectory = u8path(screenshot_get_directory());
+    auto screenshotDirectory = fs::u8path(screenshot_get_directory());
     auto screenshotPath = fs::absolute(screenshotDirectory / filename);
 
     // Check the filename isn't attempting to leave the screenshot directory for security
@@ -804,13 +766,13 @@ void CaptureImage(const CaptureOptions& options)
         auto z = tile_element_height(options.View->Position);
         CoordsXYZ coords3d(options.View->Position, z);
         auto coords2d = translate_3d_to_2d_with_z(options.Rotation, coords3d);
-        viewport.viewPos = { coords2d.x - ((viewport.view_width * options.Zoom) / 2),
-                             coords2d.y - ((viewport.view_height * options.Zoom) / 2) };
+        viewport.viewPos = { coords2d.x - ((options.Zoom.ApplyTo(viewport.view_width)) / 2),
+                             coords2d.y - ((options.Zoom.ApplyTo(viewport.view_height)) / 2) };
         viewport.zoom = options.Zoom;
     }
     else
     {
-        viewport = GetGiantViewport(gMapSize, options.Rotation, options.Zoom);
+        viewport = GetGiantViewport(options.Rotation, options.Zoom);
     }
 
     auto backupRotation = gCurrentRotation;

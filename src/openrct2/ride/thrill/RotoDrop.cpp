@@ -35,16 +35,18 @@ enum
  */
 void vehicle_visual_roto_drop(
     paint_session& session, int32_t x, int32_t imageDirection, int32_t y, int32_t z, const Vehicle* vehicle,
-    const rct_ride_entry_vehicle* vehicleEntry)
+    const CarEntry* carEntry)
 {
-    auto imageFlags = SPRITE_ID_PALETTE_COLOUR_2(vehicle->colours.body_colour, vehicle->colours.trim_colour);
+    imageDirection = OpenRCT2::Entity::Yaw::YawTo32(imageDirection);
+
+    auto imageFlags = SPRITE_ID_PALETTE_COLOUR_2(vehicle->colours.Body, vehicle->colours.Trim);
     if (vehicle->IsGhost())
     {
         imageFlags = CONSTRUCTION_MARKER;
     }
 
     int32_t image_id;
-    int32_t baseImage_id = (vehicleEntry->base_image_id + 4) + ((vehicle->animation_frame / 4) & 0x3);
+    int32_t baseImage_id = (carEntry->base_image_id + 4) + ((vehicle->animation_frame / 4) & 0x3);
     if (vehicle->restraints_position >= 64)
     {
         baseImage_id += 7;
@@ -79,19 +81,19 @@ void vehicle_visual_roto_drop(
             int32_t i = (j % 2) ? (48 - (j / 2)) : (j / 2);
             if (riding_peep_sprites[i] != 0xFF)
             {
-                baseImage_id = vehicleEntry->base_image_id + 20 + i;
+                baseImage_id = carEntry->base_image_id + 20 + i;
                 if (vehicle->restraints_position >= 64)
                 {
                     baseImage_id += 64;
                     baseImage_id += vehicle->restraints_position / 64;
                 }
                 image_id = baseImage_id | SPRITE_ID_PALETTE_COLOUR_1(riding_peep_sprites[i]);
-                PaintAddImageAsChild(session, image_id, 0, 0, 16, 16, 41, z, -5, -5, z + 1);
+                PaintAddImageAsChild(session, image_id, { 0, 0, z }, { 16, 16, 41 }, { -5, -5, z + 1 });
             }
         }
     }
 
-    assert(vehicleEntry->effect_visual == 1);
+    assert(carEntry->effect_visual == 1);
     // Although called in original code, effect_visual (splash effects) are not used for many rides and does not make sense so
     // it was taken out
 }
@@ -133,11 +135,7 @@ static void paint_roto_drop_base(
         paint_util_set_vertical_tunnel(session, height + 96);
         paint_util_set_segment_support_height(session, SEGMENTS_ALL, 0xFFFF, 0);
 
-#ifdef __TESTPAINT__
-        paint_util_set_general_support_height(session, height + 32, 0x20);
-#else
         paint_util_set_general_support_height(session, height + 96, 0x20);
-#endif
 
         return;
     }
@@ -192,7 +190,7 @@ static void paint_roto_drop_tower_section(
     if (trackElement.IsLastForTile() || trackElement.GetClearanceZ() != nextTileElement->GetBaseZ())
     {
         imageId = SPR_ROTO_DROP_TOWER_SEGMENT_TOP | session.TrackColours[SCHEME_TRACK];
-        PaintAddImageAsChild(session, imageId, 0, 0, 2, 2, 30, height, 8, 8, height);
+        PaintAddImageAsChild(session, imageId, { 0, 0, height }, { 2, 2, 30 }, { 8, 8, height });
     }
 
     paint_util_set_segment_support_height(session, SEGMENTS_ALL, 0xFFFF, 0);

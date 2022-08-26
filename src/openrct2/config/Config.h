@@ -22,12 +22,13 @@ enum class ScaleQuality : int32_t;
 enum class Sort : int32_t;
 enum class VirtualFloorStyles : int32_t;
 enum class DrawingEngine : int32_t;
+enum class TitleMusicKind : int32_t;
 
 struct GeneralConfiguration
 {
     // Paths
-    utf8* rct1_path;
-    std::string rct2_path;
+    u8string rct1_path;
+    u8string rct2_path;
 
     // Display
     int32_t default_display;
@@ -59,6 +60,13 @@ struct GeneralConfiguration
     bool show_guest_purchases;
     bool transparent_screenshot;
     bool transparent_water;
+
+    bool invisible_rides;
+    bool invisible_vehicles;
+    bool invisible_trees;
+    bool invisible_scenery;
+    bool invisible_paths;
+    bool invisible_supports;
 
     // Localisation
     int32_t language;
@@ -101,11 +109,11 @@ struct GeneralConfiguration
     // Loading and saving
     bool confirmation_prompt;
     Sort load_save_sort;
-    utf8* last_save_game_directory;
-    utf8* last_save_landscape_directory;
-    utf8* last_save_scenario_directory;
-    utf8* last_save_track_directory;
-    utf8* last_run_version;
+    u8string last_save_game_directory;
+    u8string last_save_landscape_directory;
+    u8string last_save_scenario_directory;
+    u8string last_save_track_directory;
+    u8string last_run_version;
     bool use_native_browse_dialog;
     int64_t last_version_check_time;
 };
@@ -125,14 +133,15 @@ struct InterfaceConfiguration
     utf8* current_title_sequence_preset;
     int32_t object_selection_filter_flags;
     int32_t scenarioselect_last_tab;
+    bool list_ride_vehicles_separately;
 };
 
 struct SoundConfiguration
 {
-    utf8* device;
+    std::string device;
     bool master_sound_enabled;
     uint8_t master_volume;
-    uint8_t title_music;
+    TitleMusicKind title_music;
     bool sound_enabled;
     uint8_t sound_volume;
     bool ride_music_enabled;
@@ -236,6 +245,14 @@ enum class MeasurementFormat : int32_t
     Imperial,
     Metric,
     SI
+};
+
+enum class TitleMusicKind : int32_t
+{
+    None,
+    Rct1,
+    Rct2,
+    Random
 };
 
 extern GeneralConfiguration gConfigGeneral;

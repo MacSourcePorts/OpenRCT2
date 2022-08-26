@@ -28,7 +28,8 @@ struct ScreenRect;
 namespace OpenRCT2
 {
     struct IPlatformEnvironment;
-}
+    struct IStream;
+} // namespace OpenRCT2
 
 namespace OpenRCT2::Drawing
 {
@@ -78,20 +79,20 @@ struct GamePalette
 
 struct rct_g1_element
 {
-    uint8_t* offset;       // 0x00
-    int16_t width;         // 0x04
-    int16_t height;        // 0x06
-    int16_t x_offset;      // 0x08
-    int16_t y_offset;      // 0x0A
-    uint16_t flags;        // 0x0C
-    int32_t zoomed_offset; // 0x0E
+    uint8_t* offset = nullptr; // 0x00
+    int16_t width = 0;         // 0x04
+    int16_t height = 0;        // 0x06
+    int16_t x_offset = 0;      // 0x08
+    int16_t y_offset = 0;      // 0x0A
+    uint16_t flags = 0;        // 0x0C
+    int32_t zoomed_offset = 0; // 0x0E
 };
 
 #pragma pack(push, 1)
 struct rct_g1_header
 {
-    uint32_t num_entries;
-    uint32_t total_size;
+    uint32_t num_entries = 0;
+    uint32_t total_size = 0;
 };
 assert_struct_size(rct_g1_header, 8);
 #pragma pack(pop)
@@ -145,7 +146,7 @@ assert_struct_size(rct_g1_element_32bit, 0x10);
 
 enum
 {
-    G1_FLAG_BMP = (1 << 0), // Image data is encoded as raw pixels (no transparency)
+    G1_FLAG_HAS_TRANSPARENCY = (1 << 0), // Image data contains transparent pixels (0XFF) which will not be rendered
     G1_FLAG_1 = (1 << 1),
     G1_FLAG_RLE_COMPRESSION = (1 << 2), // Image data is encoded using RCT2's form of run length encoding
     G1_FLAG_PALETTE = (1 << 3),         // Image data is a sequence of palette entries R8G8B8
@@ -480,7 +481,7 @@ extern uint32_t gPaletteEffectFrame;
 extern const FilterPaletteID GlassPaletteIds[COLOUR_COUNT];
 extern thread_local uint8_t gPeepPalette[256];
 extern thread_local uint8_t gOtherPalette[256];
-extern uint8_t text_palette[];
+extern uint8_t gTextPalette[];
 extern const translucent_window_palette TranslucentWindowPalettes[COLOUR_COUNT];
 
 extern ImageId gPickupPeepImage;
@@ -525,6 +526,7 @@ void gfx_unload_csg();
 const rct_g1_element* gfx_get_g1_element(ImageId imageId);
 const rct_g1_element* gfx_get_g1_element(ImageIndex image_id);
 void gfx_set_g1_element(ImageIndex imageId, const rct_g1_element* g1);
+std::optional<rct_gx> GfxLoadGx(const std::vector<uint8_t>& buffer);
 bool is_csg_loaded();
 void FASTCALL gfx_sprite_to_buffer(rct_drawpixelinfo& dpi, const DrawSpriteArgs& args);
 void FASTCALL gfx_bmp_sprite_to_buffer(rct_drawpixelinfo& dpi, const DrawSpriteArgs& args);
@@ -549,11 +551,11 @@ void gfx_draw_string_no_formatting(
     rct_drawpixelinfo* dpi, const ScreenCoordsXY& coords, const_utf8string buffer, TextPaint textPaint);
 
 void gfx_draw_string_left_centred(
-    rct_drawpixelinfo* dpi, rct_string_id format, void* args, colour_t colour, const ScreenCoordsXY& coords);
+    rct_drawpixelinfo* dpi, StringId format, void* args, colour_t colour, const ScreenCoordsXY& coords);
 void draw_string_centred_raw(
     rct_drawpixelinfo* dpi, const ScreenCoordsXY& coords, int32_t numLines, char* text, FontSpriteBase fontSpriteBase);
 void DrawNewsTicker(
-    rct_drawpixelinfo* dpi, const ScreenCoordsXY& coords, int32_t width, colour_t colour, rct_string_id format, void* args,
+    rct_drawpixelinfo* dpi, const ScreenCoordsXY& coords, int32_t width, colour_t colour, StringId format, void* args,
     int32_t ticks);
 void gfx_draw_string_with_y_offsets(
     rct_drawpixelinfo* dpi, const utf8* text, int32_t colour, const ScreenCoordsXY& coords, const int8_t* yOffsets,
@@ -577,8 +579,7 @@ void scrolling_text_invalidate();
 class Formatter;
 
 int32_t scrolling_text_setup(
-    struct paint_session& session, rct_string_id stringId, Formatter& ft, uint16_t scroll, uint16_t scrollingMode,
-    colour_t colour);
+    struct paint_session& session, StringId stringId, Formatter& ft, uint16_t scroll, uint16_t scrollingMode, colour_t colour);
 
 rct_size16 FASTCALL gfx_get_sprite_size(uint32_t image_id);
 size_t g1_calculate_data_size(const rct_g1_element* g1);
@@ -601,5 +602,8 @@ extern void (*mask_fn)(
 std::optional<uint32_t> GetPaletteG1Index(colour_t paletteId);
 std::optional<PaletteMap> GetPaletteMapForColour(colour_t paletteId);
 void UpdatePalette(const uint8_t* colours, int32_t start_index, int32_t num_colours);
+
+void RefreshVideo(bool recreateWindow);
+void ToggleWindowedMode();
 
 #include "NewDrawing.h"

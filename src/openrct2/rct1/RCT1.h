@@ -11,7 +11,6 @@
 
 #include "../rct12/RCT12.h"
 #include "../ride/RideRatings.h"
-#include "../ride/VehicleColour.h"
 #include "Limits.h"
 
 namespace RCT1
@@ -287,8 +286,8 @@ namespace RCT1
 
     struct UnkEntity : RCT12SpriteBase
     {
-        uint8_t pad_1F[3];             // 0x1f
-        rct_string_id name_string_idx; // 0x22
+        uint8_t pad_1F[3];        // 0x1f
+        StringId name_string_idx; // 0x22
         uint16_t var_24;
         uint16_t frame; // 0x26
         uint8_t var_28[3];
@@ -306,8 +305,8 @@ namespace RCT1
         int32_t velocity;           // 0x28
         int32_t acceleration;       // 0x2C
         uint8_t ride;               // 0x30
-        uint8_t vehicle_type;       // 0x31
-        rct_vehicle_colour colours; // 0x32
+        uint8_t CarType;            // 0x31
+        RCT12VehicleColour colours; // 0x32
         union
         {
             uint16_t track_progress; // 0x34
@@ -373,17 +372,17 @@ namespace RCT1
         };
         uint8_t speed;                // 0xC2
         uint8_t powered_acceleration; // 0xC3
-        uint8_t var_C4;
+        union
+        {
+            uint8_t DodgemsCollisionDetection; // 0xC4
+            uint8_t CollisionDetectionTimer;   // 0xC4
+        };
         uint8_t animation_frame;
         uint8_t pad_C6[0x2];
         uint32_t animationState;
         uint8_t scream_sound_id; // 0xCC
         uint8_t TrackSubposition;
-        union
-        {
-            uint8_t var_CE;
-            uint8_t num_laps; // 0xCE
-        };
+        uint8_t NumLaps;                // 0xCE
         uint8_t brake_speed;            // 0xCF
         uint16_t lost_time_out;         // 0xD0
         int8_t vertical_drop_countdown; // 0xD1
@@ -404,19 +403,51 @@ namespace RCT1
         }
     };
 
+    enum class PeepSpriteType : uint8_t
+    {
+        Normal = 0,
+        Handyman = 1,
+        Mechanic = 2,
+        Security = 3,
+        EntertainerPanda = 4,
+        EntertainerTiger = 5,
+        EntertainerElephant = 6,
+        EntertainerRoman = 7,
+        EntertainerGorilla = 8,
+        EntertainerSnowman = 9,
+        EntertainerKnight = 10,
+        EntertainerAstronaut = 11,
+
+        Balloon = 16,
+        Candyfloss = 17,
+        Umbrella = 18,
+        Pizza = 19,       // Unsure
+        SecurityAlt = 20, // Unknown
+        Popcorn = 21,
+        ArmsCrossed = 22,
+        HeadDown = 23,
+        Nauseous = 24,
+        VeryNauseous = 25,
+        RequireToilet = 26,
+        Hat = 27,
+        Burger = 28,
+        Tentacle = 29,
+        ToffeeApple = 30
+    };
+
     struct Peep : RCT12SpriteBase
     {
         uint8_t pad_1F[3];
-        rct_string_id name_string_idx; // 0x22
-        uint16_t next_x;               // 0x24
-        uint16_t next_y;               // 0x26
-        uint8_t next_z;                // 0x28
-        uint8_t next_flags;            // 0x29
-        uint8_t outside_of_park;       // 0x2A
-        uint8_t state;                 // 0x2B
-        uint8_t sub_state;             // 0x2C
-        uint8_t sprite_type;           // 0x2D
-        uint8_t type;                  // 0x2E
+        StringId name_string_idx;   // 0x22
+        uint16_t next_x;            // 0x24
+        uint16_t next_y;            // 0x26
+        uint8_t next_z;             // 0x28
+        uint8_t next_flags;         // 0x29
+        uint8_t outside_of_park;    // 0x2A
+        uint8_t state;              // 0x2B
+        uint8_t sub_state;          // 0x2C
+        PeepSpriteType sprite_type; // 0x2D
+        uint8_t type;               // 0x2E
         union
         {
             uint8_t staff_type;  // 0x2F
@@ -549,38 +580,6 @@ namespace RCT1
         }
     };
     assert_struct_size(Peep, 0x100);
-
-    enum RCT1_PEEP_SPRITE_TYPE
-    {
-        RCT1_PEEP_SPRITE_TYPE_NORMAL = 0,
-        RCT1_PEEP_SPRITE_TYPE_HANDYMAN = 1,
-        RCT1_PEEP_SPRITE_TYPE_MECHANIC = 2,
-        RCT1_PEEP_SPRITE_TYPE_SECURITY = 3,
-        RCT1_PEEP_SPRITE_TYPE_ENTERTAINER_PANDA = 4,
-        RCT1_PEEP_SPRITE_TYPE_ENTERTAINER_TIGER = 5,
-        RCT1_PEEP_SPRITE_TYPE_ENTERTAINER_ELEPHANT = 6,
-        RCT1_PEEP_SPRITE_TYPE_ENTERTAINER_ROMAN = 7,
-        RCT1_PEEP_SPRITE_TYPE_ENTERTAINER_GORILLA = 8,
-        RCT1_PEEP_SPRITE_TYPE_ENTERTAINER_SNOWMAN = 9,
-        RCT1_PEEP_SPRITE_TYPE_ENTERTAINER_KNIGHT = 10,
-        RCT1_PEEP_SPRITE_TYPE_ENTERTAINER_ASTRONAUT = 11,
-
-        RCT1_PEEP_SPRITE_TYPE_BALLOON = 16,
-        RCT1_PEEP_SPRITE_TYPE_CANDYFLOSS = 17,
-        RCT1_PEEP_SPRITE_TYPE_UMBRELLA = 18,
-        RCT1_PEEP_SPRITE_TYPE_PIZZA = 19,        // Unsure
-        RCT1_PEEP_SPRITE_TYPE_SECURITY_ALT = 20, // Unknown
-        RCT1_PEEP_SPRITE_TYPE_POPCORN = 21,
-        RCT1_PEEP_SPRITE_TYPE_ARMS_CROSSED = 22,
-        RCT1_PEEP_SPRITE_TYPE_HEAD_DOWN = 23,
-        RCT1_PEEP_SPRITE_TYPE_NAUSEOUS = 24,
-        RCT1_PEEP_SPRITE_TYPE_VERY_NAUSEOUS = 25,
-        RCT1_PEEP_SPRITE_TYPE_REQUIRE_TOILET = 26,
-        RCT1_PEEP_SPRITE_TYPE_HAT = 27,
-        RCT1_PEEP_SPRITE_TYPE_BURGER = 28,
-        RCT1_PEEP_SPRITE_TYPE_TENTACLE = 29,
-        RCT1_PEEP_SPRITE_TYPE_TOFFEE_APPLE = 30
-    };
 
     union Entity
     {
@@ -797,7 +796,7 @@ namespace RCT1
         uint32_t flags;                                               // 0x02
         uint8_t mode;                                                 // 0x06
         uint8_t version_and_colour_scheme;                            // 0x07 0b0000_VVCC
-        rct_vehicle_colour vehicle_colours[Limits::MaxTrainsPerRide]; // 0x08
+        RCT12VehicleColour vehicle_colours[Limits::MaxTrainsPerRide]; // 0x08
         uint8_t track_spine_colour_v0;                                // 0x20
         uint8_t track_rail_colour_v0;                                 // 0x21
         uint8_t track_support_colour_v0;                              // 0x22
@@ -810,7 +809,7 @@ namespace RCT1
         {
             uint8_t operation_setting;
             uint8_t launch_speed;
-            uint8_t num_laps;
+            uint8_t NumLaps;
             uint8_t max_people;
         };
         int8_t max_speed;                // 0x29
@@ -1200,6 +1199,9 @@ namespace RCT1
         MINE_TRAIN_CARRIAGE = 36,
         CORKSCREW_RC_FRONT = 38,
         CORKSCREW_RC_CARRIAGE = 39,
+        LOG_FLUME_BOAT = 45,
+
+        LOG_FLUME_BOAT_REVERSED = 61,
         GHOST_TRAIN_CAR = 63,
         TWISTER_RC_SPOILER = 64,
         TWISTER_RC_CARRIAGE = 65,
@@ -1214,6 +1216,11 @@ namespace RCT1
         MINIGOLF_BALL = 82,
         SPLASH_BOAT = 83,
         SPLASH_BOAT_INVISIBLE = 84,
+        HEARTLINE_TWISTER_FORWARDS = 88,  // Used for both regular cars and “starting reversed“ cars that have been reversed
+                                          // again.
+        HEARTLINE_TWISTER_BACKWARDS = 89, // Used for both regular cars that went through a reverser, as well as reversed cars
+                                          // in the starting position.
+        REVERSER_RC_CAR_REVERSED = 95,
         HYPERCOASTER_FRONT = 96,
         HYPERCOASTER_CARRIAGE = 97,
         INVERTED_4_ACROSS_CARRIAGE = 98,
@@ -1222,6 +1229,8 @@ namespace RCT1
         RIVER_RAFT = 103,
         MINIATURE_RAILWAY_AMERICAN_TENDER = 104,
         MINIATURE_RAILWAY_AMERICAN_LOCOMOTIVE = 105,
+        AIR_POWERED_VERTICAL_COASTER_TRAIN_FRONT = 106,
+        AIR_POWERED_VERTICAL_COASTER_TRAIN_CAR = 107,
     };
 
     enum
@@ -1265,7 +1274,7 @@ namespace RCT1
         RCT1_PATH_SUPPORT_TYPE_BAMBOO,
     };
 
-    track_type_t RCT1TrackTypeToOpenRCT2(RCT12TrackType origTrackType, uint8_t rideType);
+    track_type_t RCT1TrackTypeToOpenRCT2(RCT12TrackType origTrackType, ride_type_t rideType);
 } // namespace RCT1
 
 void load_from_sv4(const char* path);

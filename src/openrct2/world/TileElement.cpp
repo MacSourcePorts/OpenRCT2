@@ -81,12 +81,12 @@ void TileElement::RemoveBannerEntry()
     auto banner = GetBanner(bannerIndex);
     if (banner != nullptr)
     {
-        window_close_by_number(WC_BANNER, bannerIndex.ToUnderlying());
+        window_close_by_number(WindowClass::Banner, bannerIndex.ToUnderlying());
         DeleteBanner(banner->id);
     }
 }
 
-ride_id_t TileElement::GetRideIndex() const
+RideId TileElement::GetRideIndex() const
 {
     switch (GetType())
     {
@@ -97,7 +97,7 @@ ride_id_t TileElement::GetRideIndex() const
         case TileElementType::Path:
             return AsPath()->GetRideIndex();
         default:
-            return RIDE_ID_NULL;
+            return RideId::GetNull();
     }
 }
 

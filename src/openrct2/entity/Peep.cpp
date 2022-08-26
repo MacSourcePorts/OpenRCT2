@@ -15,6 +15,7 @@
 #include "../Input.h"
 #include "../OpenRCT2.h"
 #include "../actions/GameAction.h"
+#include "../audio/AudioChannel.h"
 #include "../audio/AudioMixer.h"
 #include "../audio/audio.h"
 #include "../config/Config.h"
@@ -52,11 +53,17 @@
 #include "../world/Scenery.h"
 #include "../world/SmallScenery.h"
 #include "../world/Surface.h"
+#include "PatrolArea.h"
 #include "Staff.h"
 
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <map>
+#include <memory>
+#include <optional>
+
+using namespace OpenRCT2::Audio;
 
 uint8_t gGuestChangeModifier;
 uint32_t gNumGuestsInPark;
@@ -72,10 +79,12 @@ uint32_t gNextGuestNumber;
 
 uint8_t gPeepWarningThrottle[16];
 
+std::unique_ptr<GuestPathfinding> gGuestPathfinder = std::make_unique<OriginalPathfinding>();
+
 static uint8_t _unk_F1AEF0;
 static TileElement* _peepRideEntranceExitElement;
 
-static void* _crowdSoundChannel = nullptr;
+static std::shared_ptr<IAudioChannel> _crowdSoundChannel = nullptr;
 
 static void peep_128_tick_update(Peep* peep, int32_t index);
 static void peep_release_balloon(Guest* peep, int16_t spawn_height);
@@ -277,7 +286,7 @@ bool Peep::CheckForPath()
     PROFILED_FUNCTION();
 
     PathCheckOptimisation++;
-    if ((PathCheckOptimisation & 0xF) != (sprite_index & 0xF))
+    if ((PathCheckOptimisation & 0xF) != (sprite_index.ToUnderlying() & 0xF))
     {
         // This condition makes the check happen less often
         // As a side effect peeps hover for a short,
@@ -486,7 +495,8 @@ std::optional<CoordsXY> Peep::UpdateAction(int16_t& xy_distance)
     WindowInvalidateFlags |= PEEP_INVALIDATE_PEEP_2;
 
     const auto curLoc = GetLocation();
-    Litter::Create({ curLoc, sprite_direction }, (sprite_index & 1) ? Litter::Type::VomitAlt : Litter::Type::Vomit);
+    Litter::Create(
+        { curLoc, sprite_direction }, (sprite_index.ToUnderlying() & 1) ? Litter::Type::VomitAlt : Litter::Type::Vomit);
 
     static constexpr OpenRCT2::Audio::SoundId coughs[4] = {
         OpenRCT2::Audio::SoundId::Cough1,
@@ -524,7 +534,7 @@ void peep_decrement_num_riders(Peep* peep)
  */
 void peep_window_state_update(Peep* peep)
 {
-    rct_window* w = window_find_by_number(WC_PEEP, peep->sprite_index);
+    rct_window* w = window_find_by_number(WindowClass::Peep, peep->sprite_index.ToUnderlying());
     if (w != nullptr)
         window_event_invalidate_call(w);
 
@@ -540,13 +550,13 @@ void peep_window_state_update(Peep* peep)
             }
         }
 
-        window_invalidate_by_number(WC_PEEP, peep->sprite_index);
-        window_invalidate_by_class(WC_GUEST_LIST);
+        window_invalidate_by_number(WindowClass::Peep, peep->sprite_index);
+        window_invalidate_by_class(WindowClass::GuestList);
     }
     else
     {
-        window_invalidate_by_number(WC_PEEP, peep->sprite_index);
-        window_invalidate_by_class(WC_STAFF_LIST);
+        window_invalidate_by_number(WindowClass::Peep, peep->sprite_index);
+        window_invalidate_by_class(WindowClass::StaffList);
     }
 }
 
@@ -609,7 +619,7 @@ GameActions::Result Peep::Place(const TileCoordsXYZ& location, bool apply)
     if (auto res = MapCanConstructAt({ destination, destination.z, destination.z + (1 * 8) }, { 0b1111, 0 });
         res.Error != GameActions::Status::Ok)
     {
-        const auto stringId = std::get<rct_string_id>(res.ErrorMessage);
+        const auto stringId = std::get<StringId>(res.ErrorMessage);
         if (stringId != STR_RAISE_OR_LOWER_LAND_FIRST && stringId != STR_FOOTPATH_IN_THE_WAY)
         {
             return GameActions::Result(
@@ -652,23 +662,23 @@ void peep_sprite_remove(Peep* peep)
     }
     peep->Invalidate();
 
-    window_close_by_number(WC_PEEP, peep->sprite_index);
+    window_close_by_number(WindowClass::Peep, peep->sprite_index);
 
-    window_close_by_number(WC_FIRE_PROMPT, EnumValue(peep->Type));
+    window_close_by_number(WindowClass::FirePrompt, EnumValue(peep->Type));
 
     auto* staff = peep->As<Staff>();
     // Needed for invalidations after sprite removal
     bool wasGuest = staff == nullptr;
     if (wasGuest)
     {
-        News::DisableNewsItems(News::ItemType::PeepOnRide, peep->sprite_index);
+        News::DisableNewsItems(News::ItemType::PeepOnRide, peep->sprite_index.ToUnderlying());
     }
     else
     {
         staff->ClearPatrolArea();
-        staff_update_greyed_patrol_areas();
+        UpdateConsolidatedPatrolAreas();
 
-        News::DisableNewsItems(News::ItemType::Peep, staff->sprite_index);
+        News::DisableNewsItems(News::ItemType::Peep, staff->sprite_index.ToUnderlying());
     }
     EntityRemove(peep);
 
@@ -929,9 +939,9 @@ void Peep::Update()
     auto* guest = As<Guest>();
     if (guest != nullptr)
     {
-        if (guest->PreviousRide != RIDE_ID_NULL)
+        if (!guest->PreviousRide.IsNull())
             if (++guest->PreviousRideTimeOut >= 720)
-                guest->PreviousRide = RIDE_ID_NULL;
+                guest->PreviousRide = RideId::GetNull();
 
         peep_update_thoughts(guest);
     }
@@ -1006,153 +1016,191 @@ void Peep::Update()
 void peep_problem_warnings_update()
 {
     Ride* ride;
-    uint32_t hunger_counter = 0, lost_counter = 0, noexit_counter = 0, thirst_counter = 0, litter_counter = 0,
-             disgust_counter = 0, toilet_counter = 0, vandalism_counter = 0;
-    uint8_t* warning_throttle = gPeepWarningThrottle;
+    uint32_t hungerCounter = 0, lostCounter = 0, noexitCounter = 0, thirstCounter = 0, litterCounter = 0, disgustCounter = 0,
+             toiletCounter = 0, vandalismCounter = 0;
+    uint8_t* warningThrottle = gPeepWarningThrottle;
+
+    int32_t inQueueCounter = 0;
+    int32_t tooLongQueueCounter = 0;
+    std::map<RideId, int32_t> queueComplainingGuestsMap;
 
     for (auto peep : EntityList<Guest>())
     {
-        if (peep->OutsideOfPark || peep->Thoughts[0].freshness > 5)
+        if (peep->OutsideOfPark)
+            continue;
+
+        if (peep->State == PeepState::Queuing || peep->State == PeepState::QueuingFront)
+            inQueueCounter++;
+
+        if (peep->Thoughts[0].freshness > 5)
             continue;
 
         switch (peep->Thoughts[0].type)
         {
             case PeepThoughtType::Lost: // 0x10
-                lost_counter++;
+                lostCounter++;
                 break;
 
             case PeepThoughtType::Hungry: // 0x14
-                if (peep->GuestHeadingToRideId == RIDE_ID_NULL)
+                if (peep->GuestHeadingToRideId.IsNull())
                 {
-                    hunger_counter++;
+                    hungerCounter++;
                     break;
                 }
                 ride = get_ride(peep->GuestHeadingToRideId);
                 if (ride != nullptr && !ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_FLAT_RIDE))
-                    hunger_counter++;
+                    hungerCounter++;
                 break;
 
             case PeepThoughtType::Thirsty:
-                if (peep->GuestHeadingToRideId == RIDE_ID_NULL)
+                if (peep->GuestHeadingToRideId.IsNull())
                 {
-                    thirst_counter++;
+                    thirstCounter++;
                     break;
                 }
                 ride = get_ride(peep->GuestHeadingToRideId);
                 if (ride != nullptr && !ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_SELLS_DRINKS))
-                    thirst_counter++;
+                    thirstCounter++;
                 break;
 
             case PeepThoughtType::Toilet:
-                if (peep->GuestHeadingToRideId == RIDE_ID_NULL)
+                if (peep->GuestHeadingToRideId.IsNull())
                 {
-                    toilet_counter++;
+                    toiletCounter++;
                     break;
                 }
                 ride = get_ride(peep->GuestHeadingToRideId);
                 if (ride != nullptr && !ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IS_TOILET))
-                    toilet_counter++;
+                    toiletCounter++;
                 break;
 
             case PeepThoughtType::BadLitter: // 0x1a
-                litter_counter++;
+                litterCounter++;
                 break;
             case PeepThoughtType::CantFindExit: // 0x1b
-                noexit_counter++;
+                noexitCounter++;
                 break;
             case PeepThoughtType::PathDisgusting: // 0x1f
-                disgust_counter++;
+                disgustCounter++;
                 break;
             case PeepThoughtType::Vandalism: // 0x21
-                vandalism_counter++;
+                vandalismCounter++;
+                break;
+            case PeepThoughtType::QueuingAges:
+                tooLongQueueCounter++;
+                queueComplainingGuestsMap[peep->Thoughts[0].rideId]++;
                 break;
             default:
                 break;
         }
     }
     // could maybe be packed into a loop, would lose a lot of clarity though
-    if (warning_throttle[0])
-        --warning_throttle[0];
-    else if (hunger_counter >= PEEP_HUNGER_WARNING_THRESHOLD && hunger_counter >= gNumGuestsInPark / 16)
+    if (warningThrottle[0])
+        --warningThrottle[0];
+    else if (hungerCounter >= PEEP_HUNGER_WARNING_THRESHOLD && hungerCounter >= gNumGuestsInPark / 16)
     {
-        warning_throttle[0] = 4;
+        warningThrottle[0] = 4;
         if (gConfigNotifications.guest_warnings)
         {
-            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_ARE_HUNGRY, 20, {});
+            constexpr auto thoughtId = static_cast<uint32_t>(PeepThoughtType::Hungry);
+            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_ARE_HUNGRY, thoughtId, {});
         }
     }
 
-    if (warning_throttle[1])
-        --warning_throttle[1];
-    else if (thirst_counter >= PEEP_THIRST_WARNING_THRESHOLD && thirst_counter >= gNumGuestsInPark / 16)
+    if (warningThrottle[1])
+        --warningThrottle[1];
+    else if (thirstCounter >= PEEP_THIRST_WARNING_THRESHOLD && thirstCounter >= gNumGuestsInPark / 16)
     {
-        warning_throttle[1] = 4;
+        warningThrottle[1] = 4;
         if (gConfigNotifications.guest_warnings)
         {
-            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_ARE_THIRSTY, 21, {});
+            constexpr auto thoughtId = static_cast<uint32_t>(PeepThoughtType::Thirsty);
+            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_ARE_THIRSTY, thoughtId, {});
         }
     }
 
-    if (warning_throttle[2])
-        --warning_throttle[2];
-    else if (toilet_counter >= PEEP_TOILET_WARNING_THRESHOLD && toilet_counter >= gNumGuestsInPark / 16)
+    if (warningThrottle[2])
+        --warningThrottle[2];
+    else if (toiletCounter >= PEEP_TOILET_WARNING_THRESHOLD && toiletCounter >= gNumGuestsInPark / 16)
     {
-        warning_throttle[2] = 4;
+        warningThrottle[2] = 4;
         if (gConfigNotifications.guest_warnings)
         {
-            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_CANT_FIND_TOILET, 22, {});
+            constexpr auto thoughtId = static_cast<uint32_t>(PeepThoughtType::Toilet);
+            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_CANT_FIND_TOILET, thoughtId, {});
         }
     }
 
-    if (warning_throttle[3])
-        --warning_throttle[3];
-    else if (litter_counter >= PEEP_LITTER_WARNING_THRESHOLD && litter_counter >= gNumGuestsInPark / 32)
+    if (warningThrottle[3])
+        --warningThrottle[3];
+    else if (litterCounter >= PEEP_LITTER_WARNING_THRESHOLD && litterCounter >= gNumGuestsInPark / 32)
     {
-        warning_throttle[3] = 4;
+        warningThrottle[3] = 4;
         if (gConfigNotifications.guest_warnings)
         {
-            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_DISLIKE_LITTER, 26, {});
+            constexpr auto thoughtId = static_cast<uint32_t>(PeepThoughtType::BadLitter);
+            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_DISLIKE_LITTER, thoughtId, {});
         }
     }
 
-    if (warning_throttle[4])
-        --warning_throttle[4];
-    else if (disgust_counter >= PEEP_DISGUST_WARNING_THRESHOLD && disgust_counter >= gNumGuestsInPark / 32)
+    if (warningThrottle[4])
+        --warningThrottle[4];
+    else if (disgustCounter >= PEEP_DISGUST_WARNING_THRESHOLD && disgustCounter >= gNumGuestsInPark / 32)
     {
-        warning_throttle[4] = 4;
+        warningThrottle[4] = 4;
         if (gConfigNotifications.guest_warnings)
         {
-            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_DISGUSTED_BY_PATHS, 31, {});
+            constexpr auto thoughtId = static_cast<uint32_t>(PeepThoughtType::PathDisgusting);
+            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_DISGUSTED_BY_PATHS, thoughtId, {});
         }
     }
 
-    if (warning_throttle[5])
-        --warning_throttle[5];
-    else if (vandalism_counter >= PEEP_VANDALISM_WARNING_THRESHOLD && vandalism_counter >= gNumGuestsInPark / 32)
+    if (warningThrottle[5])
+        --warningThrottle[5];
+    else if (vandalismCounter >= PEEP_VANDALISM_WARNING_THRESHOLD && vandalismCounter >= gNumGuestsInPark / 32)
     {
-        warning_throttle[5] = 4;
+        warningThrottle[5] = 4;
         if (gConfigNotifications.guest_warnings)
         {
-            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_DISLIKE_VANDALISM, 33, {});
+            constexpr auto thoughtId = static_cast<uint32_t>(PeepThoughtType::Vandalism);
+            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_DISLIKE_VANDALISM, thoughtId, {});
         }
     }
 
-    if (warning_throttle[6])
-        --warning_throttle[6];
-    else if (noexit_counter >= PEEP_NOEXIT_WARNING_THRESHOLD)
+    if (warningThrottle[6])
+        --warningThrottle[6];
+    else if (noexitCounter >= PEEP_NOEXIT_WARNING_THRESHOLD)
     {
-        warning_throttle[6] = 4;
+        warningThrottle[6] = 4;
         if (gConfigNotifications.guest_warnings)
         {
-            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_GETTING_LOST_OR_STUCK, 27, {});
+            constexpr auto thoughtId = static_cast<uint32_t>(PeepThoughtType::CantFindExit);
+            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_GETTING_LOST_OR_STUCK, thoughtId, {});
         }
     }
-    else if (lost_counter >= PEEP_LOST_WARNING_THRESHOLD)
+    else if (lostCounter >= PEEP_LOST_WARNING_THRESHOLD)
     {
-        warning_throttle[6] = 4;
+        warningThrottle[6] = 4;
         if (gConfigNotifications.guest_warnings)
         {
-            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_GETTING_LOST_OR_STUCK, 16, {});
+            constexpr auto thoughtId = static_cast<uint32_t>(PeepThoughtType::Lost);
+            News::AddItemToQueue(News::ItemType::Peeps, STR_PEEPS_GETTING_LOST_OR_STUCK, thoughtId, {});
+        }
+    }
+
+    if (warningThrottle[7])
+        --warningThrottle[7];
+    else if (tooLongQueueCounter > PEEP_TOO_LONG_QUEUE_THRESHOLD && tooLongQueueCounter > inQueueCounter / 20)
+    { // The amount of guests complaining about queue duration is at least 5% of the amount of queuing guests.
+      // This includes guests who are no longer queuing.
+        warningThrottle[7] = 4;
+        if (gConfigNotifications.guest_warnings)
+        {
+            auto rideWithMostQueueComplaints = std::max_element(
+                queueComplainingGuestsMap.begin(), queueComplainingGuestsMap.end(),
+                [](auto& lhs, auto& rhs) { return lhs.second < rhs.second; });
+            auto rideId = rideWithMostQueueComplaints->first.ToUnderlying();
+            News::AddItemToQueue(News::ItemType::Ride, STR_PEEPS_COMPLAINING_ABOUT_QUEUE_LENGTH_WARNING, rideId, {});
         }
     }
 }
@@ -1161,7 +1209,7 @@ void peep_stop_crowd_noise()
 {
     if (_crowdSoundChannel != nullptr)
     {
-        Mixer_Stop_Channel(_crowdSoundChannel);
+        _crowdSoundChannel->Stop();
         _crowdSoundChannel = nullptr;
     }
 }
@@ -1217,8 +1265,7 @@ void peep_update_crowd_noise()
         // Mute crowd noise
         if (_crowdSoundChannel != nullptr)
         {
-            Mixer_Stop_Channel(_crowdSoundChannel);
-            _crowdSoundChannel = nullptr;
+            _crowdSoundChannel->SetVolume(0);
         }
     }
     else
@@ -1229,20 +1276,20 @@ void peep_update_crowd_noise()
         // 207360000 maybe related to DSBVOLUME_MIN which is -10,000 (dB/100)
         volume = 120 - std::min(visiblePeeps, 120);
         volume = volume * volume * volume * volume;
-        volume = (((207360000 - volume) / viewport->zoom) - 207360000) / 65536 - 150;
+        volume = (viewport->zoom.ApplyInversedTo(207360000 - volume) - 207360000) / 65536 - 150;
 
         // Load and play crowd noise if needed and set volume
-        if (_crowdSoundChannel == nullptr)
+        if (_crowdSoundChannel == nullptr || _crowdSoundChannel->IsDone())
         {
-            _crowdSoundChannel = Mixer_Play_Music(PATH_ID_CSS2, MIXER_LOOP_INFINITE, false);
+            _crowdSoundChannel = CreateAudioChannel(SoundId::CrowdAmbience, true, 0);
             if (_crowdSoundChannel != nullptr)
             {
-                Mixer_Channel_SetGroup(_crowdSoundChannel, OpenRCT2::Audio::MixerGroup::Sound);
+                _crowdSoundChannel->SetGroup(OpenRCT2::Audio::MixerGroup::Sound);
             }
         }
         if (_crowdSoundChannel != nullptr)
         {
-            Mixer_Channel_Volume(_crowdSoundChannel, DStoMixerVolume(volume));
+            _crowdSoundChannel->SetVolume(DStoMixerVolume(volume));
         }
     }
 }
@@ -1298,10 +1345,10 @@ void Peep::FormatActionTo(Formatter& ft) const
     switch (State)
     {
         case PeepState::Falling:
-            ft.Add<rct_string_id>(Action == PeepActionType::Drowning ? STR_DROWNING : STR_WALKING);
+            ft.Add<StringId>(Action == PeepActionType::Drowning ? STR_DROWNING : STR_WALKING);
             break;
         case PeepState::One:
-            ft.Add<rct_string_id>(STR_WALKING);
+            ft.Add<StringId>(STR_WALKING);
             break;
         case PeepState::OnRide:
         case PeepState::LeavingRide:
@@ -1310,19 +1357,18 @@ void Peep::FormatActionTo(Formatter& ft) const
             auto ride = get_ride(CurrentRide);
             if (ride != nullptr)
             {
-                ft.Add<rct_string_id>(
-                    ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IN_RIDE) ? STR_IN_RIDE : STR_ON_RIDE);
+                ft.Add<StringId>(ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IN_RIDE) ? STR_IN_RIDE : STR_ON_RIDE);
                 ride->FormatNameTo(ft);
             }
             else
             {
-                ft.Add<rct_string_id>(STR_ON_RIDE).Add<rct_string_id>(STR_NONE);
+                ft.Add<StringId>(STR_ON_RIDE).Add<StringId>(STR_NONE);
             }
             break;
         }
         case PeepState::Buying:
         {
-            ft.Add<rct_string_id>(STR_AT_RIDE);
+            ft.Add<StringId>(STR_AT_RIDE);
             auto ride = get_ride(CurrentRide);
             if (ride != nullptr)
             {
@@ -1330,7 +1376,7 @@ void Peep::FormatActionTo(Formatter& ft) const
             }
             else
             {
-                ft.Add<rct_string_id>(STR_NONE);
+                ft.Add<StringId>(STR_NONE);
             }
             break;
         }
@@ -1340,18 +1386,18 @@ void Peep::FormatActionTo(Formatter& ft) const
             auto* guest = As<Guest>();
             if (guest != nullptr)
             {
-                if (guest->GuestHeadingToRideId != RIDE_ID_NULL)
+                if (!guest->GuestHeadingToRideId.IsNull())
                 {
                     auto ride = get_ride(guest->GuestHeadingToRideId);
                     if (ride != nullptr)
                     {
-                        ft.Add<rct_string_id>(STR_HEADING_FOR);
+                        ft.Add<StringId>(STR_HEADING_FOR);
                         ride->FormatNameTo(ft);
                     }
                 }
                 else
                 {
-                    ft.Add<rct_string_id>((PeepFlags & PEEP_FLAGS_LEAVING_PARK) ? STR_LEAVING_PARK : STR_WALKING);
+                    ft.Add<StringId>((PeepFlags & PEEP_FLAGS_LEAVING_PARK) ? STR_LEAVING_PARK : STR_WALKING);
                 }
             }
             break;
@@ -1362,61 +1408,61 @@ void Peep::FormatActionTo(Formatter& ft) const
             auto ride = get_ride(CurrentRide);
             if (ride != nullptr)
             {
-                ft.Add<rct_string_id>(STR_QUEUING_FOR);
+                ft.Add<StringId>(STR_QUEUING_FOR);
                 ride->FormatNameTo(ft);
             }
             break;
         }
         case PeepState::Sitting:
-            ft.Add<rct_string_id>(STR_SITTING);
+            ft.Add<StringId>(STR_SITTING);
             break;
         case PeepState::Watching:
-            if (CurrentRide != RIDE_ID_NULL)
+            if (!CurrentRide.IsNull())
             {
                 auto ride = get_ride(CurrentRide);
                 if (ride != nullptr)
                 {
-                    ft.Add<rct_string_id>((StandingFlags & 0x1) ? STR_WATCHING_CONSTRUCTION_OF : STR_WATCHING_RIDE);
+                    ft.Add<StringId>((StandingFlags & 0x1) ? STR_WATCHING_CONSTRUCTION_OF : STR_WATCHING_RIDE);
                     ride->FormatNameTo(ft);
                 }
             }
             else
             {
-                ft.Add<rct_string_id>((StandingFlags & 0x1) ? STR_WATCHING_NEW_RIDE_BEING_CONSTRUCTED : STR_LOOKING_AT_SCENERY);
+                ft.Add<StringId>((StandingFlags & 0x1) ? STR_WATCHING_NEW_RIDE_BEING_CONSTRUCTED : STR_LOOKING_AT_SCENERY);
             }
             break;
         case PeepState::Picked:
-            ft.Add<rct_string_id>(STR_SELECT_LOCATION);
+            ft.Add<StringId>(STR_SELECT_LOCATION);
             break;
         case PeepState::Patrolling:
         case PeepState::EnteringPark:
         case PeepState::LeavingPark:
-            ft.Add<rct_string_id>(STR_WALKING);
+            ft.Add<StringId>(STR_WALKING);
             break;
         case PeepState::Mowing:
-            ft.Add<rct_string_id>(STR_MOWING_GRASS);
+            ft.Add<StringId>(STR_MOWING_GRASS);
             break;
         case PeepState::Sweeping:
-            ft.Add<rct_string_id>(STR_SWEEPING_FOOTPATH);
+            ft.Add<StringId>(STR_SWEEPING_FOOTPATH);
             break;
         case PeepState::Watering:
-            ft.Add<rct_string_id>(STR_WATERING_GARDENS);
+            ft.Add<StringId>(STR_WATERING_GARDENS);
             break;
         case PeepState::EmptyingBin:
-            ft.Add<rct_string_id>(STR_EMPTYING_LITTER_BIN);
+            ft.Add<StringId>(STR_EMPTYING_LITTER_BIN);
             break;
         case PeepState::Answering:
             if (SubState == 0)
             {
-                ft.Add<rct_string_id>(STR_WALKING);
+                ft.Add<StringId>(STR_WALKING);
             }
             else if (SubState == 1)
             {
-                ft.Add<rct_string_id>(STR_ANSWERING_RADIO_CALL);
+                ft.Add<StringId>(STR_ANSWERING_RADIO_CALL);
             }
             else
             {
-                ft.Add<rct_string_id>(STR_RESPONDING_TO_RIDE_BREAKDOWN_CALL);
+                ft.Add<StringId>(STR_RESPONDING_TO_RIDE_BREAKDOWN_CALL);
                 auto ride = get_ride(CurrentRide);
                 if (ride != nullptr)
                 {
@@ -1424,13 +1470,13 @@ void Peep::FormatActionTo(Formatter& ft) const
                 }
                 else
                 {
-                    ft.Add<rct_string_id>(STR_NONE);
+                    ft.Add<StringId>(STR_NONE);
                 }
             }
             break;
         case PeepState::Fixing:
         {
-            ft.Add<rct_string_id>(STR_FIXING_RIDE);
+            ft.Add<StringId>(STR_FIXING_RIDE);
             auto ride = get_ride(CurrentRide);
             if (ride != nullptr)
             {
@@ -1438,13 +1484,13 @@ void Peep::FormatActionTo(Formatter& ft) const
             }
             else
             {
-                ft.Add<rct_string_id>(STR_NONE);
+                ft.Add<StringId>(STR_NONE);
             }
             break;
         }
         case PeepState::HeadingToInspection:
         {
-            ft.Add<rct_string_id>(STR_HEADING_TO_RIDE_FOR_INSPECTION);
+            ft.Add<StringId>(STR_HEADING_TO_RIDE_FOR_INSPECTION);
             auto ride = get_ride(CurrentRide);
             if (ride != nullptr)
             {
@@ -1452,13 +1498,13 @@ void Peep::FormatActionTo(Formatter& ft) const
             }
             else
             {
-                ft.Add<rct_string_id>(STR_NONE);
+                ft.Add<StringId>(STR_NONE);
             }
             break;
         }
         case PeepState::Inspecting:
         {
-            ft.Add<rct_string_id>(STR_INSPECTING_RIDE);
+            ft.Add<StringId>(STR_INSPECTING_RIDE);
             auto ride = get_ride(CurrentRide);
             if (ride != nullptr)
             {
@@ -1466,14 +1512,14 @@ void Peep::FormatActionTo(Formatter& ft) const
             }
             else
             {
-                ft.Add<rct_string_id>(STR_NONE);
+                ft.Add<StringId>(STR_NONE);
             }
             break;
         }
     }
 }
 
-static constexpr const rct_string_id _staffNames[] = {
+static constexpr const StringId _staffNames[] = {
     STR_HANDYMAN_X,
     STR_MECHANIC_X,
     STR_SECURITY_GUARD_X,
@@ -1493,22 +1539,22 @@ void Peep::FormatNameTo(Formatter& ft) const
                 staffNameIndex = 0;
             }
 
-            ft.Add<rct_string_id>(_staffNames[staffNameIndex]);
+            ft.Add<StringId>(_staffNames[staffNameIndex]);
             ft.Add<uint32_t>(Id);
         }
         else if (gParkFlags & PARK_FLAGS_SHOW_REAL_GUEST_NAMES)
         {
             auto realNameStringId = get_real_name_string_id_from_id(Id);
-            ft.Add<rct_string_id>(realNameStringId);
+            ft.Add<StringId>(realNameStringId);
         }
         else
         {
-            ft.Add<rct_string_id>(STR_GUEST_X).Add<uint32_t>(Id);
+            ft.Add<StringId>(STR_GUEST_X).Add<uint32_t>(Id);
         }
     }
     else
     {
-        ft.Add<rct_string_id>(STR_STRING).Add<const char*>(Name);
+        ft.Add<StringId>(STR_STRING).Add<const char*>(Name);
     }
 }
 
@@ -1561,14 +1607,14 @@ void peep_set_map_tooltip(Peep* peep)
     auto* guest = peep->As<Guest>();
     if (guest != nullptr)
     {
-        ft.Add<rct_string_id>((peep->PeepFlags & PEEP_FLAGS_TRACKING) ? STR_TRACKED_GUEST_MAP_TIP : STR_GUEST_MAP_TIP);
+        ft.Add<StringId>((peep->PeepFlags & PEEP_FLAGS_TRACKING) ? STR_TRACKED_GUEST_MAP_TIP : STR_GUEST_MAP_TIP);
         ft.Add<uint32_t>(get_peep_face_sprite_small(guest));
         guest->FormatNameTo(ft);
         guest->FormatActionTo(ft);
     }
     else
     {
-        ft.Add<rct_string_id>(STR_STAFF_MAP_TIP);
+        ft.Add<StringId>(STR_STAFF_MAP_TIP);
         peep->FormatNameTo(ft);
         peep->FormatActionTo(ft);
     }
@@ -1644,7 +1690,7 @@ static bool peep_interact_with_entrance(Peep* peep, const CoordsXYE& coords, uin
     {
         // Default guest/staff behaviour attempting to enter a
         // ride exit is to turn around.
-        peep->InteractionRideIndex = RIDE_ID_NULL;
+        peep->InteractionRideIndex = RideId::GetNull();
         peep_return_to_centre_of_tile(peep);
         return true;
     }
@@ -1660,7 +1706,7 @@ static bool peep_interact_with_entrance(Peep* peep, const CoordsXYE& coords, uin
         {
             // Default staff behaviour attempting to enter a
             // ride entrance is to turn around.
-            peep->InteractionRideIndex = RIDE_ID_NULL;
+            peep->InteractionRideIndex = RideId::GetNull();
             peep_return_to_centre_of_tile(peep);
             return true;
         }
@@ -1702,10 +1748,11 @@ static bool peep_interact_with_entrance(Peep* peep, const CoordsXYE& coords, uin
         guest->ActionSpriteImageOffset = _unk_F1AEF0;
         guest->InteractionRideIndex = rideIndex;
 
-        uint16_t previous_last = ride->stations[stationNum].LastPeepInQueue;
-        ride->stations[stationNum].LastPeepInQueue = guest->sprite_index;
+        auto& station = ride->GetStation(stationNum);
+        auto previous_last = station.LastPeepInQueue;
+        station.LastPeepInQueue = guest->sprite_index;
         guest->GuestNextInQueue = previous_last;
-        ride->stations[stationNum].QueueLength++;
+        station.QueueLength++;
 
         guest->CurrentRide = rideIndex;
         guest->CurrentRideStation = stationNum;
@@ -1901,7 +1948,7 @@ static bool peep_interact_with_entrance(Peep* peep, const CoordsXYE& coords, uin
         }
 
         gTotalAdmissions++;
-        window_invalidate_by_number(WC_PARK_INFORMATION, 0);
+        window_invalidate_by_number(WindowClass::ParkInformation, 0);
 
         guest->Var37 = 1;
         auto destination = guest->GetDestination();
@@ -2101,7 +2148,7 @@ static void peep_interact_with_path(Peep* peep, const CoordsXYE& coords)
             else
             {
                 // Queue got disconnected from the original ride.
-                guest->InteractionRideIndex = RIDE_ID_NULL;
+                guest->InteractionRideIndex = RideId::GetNull();
                 guest->RemoveFromQueue();
                 guest->SetState(PeepState::One);
                 peep_footpath_move_forward(guest, { coords, tile_element }, vandalism_present);
@@ -2127,10 +2174,11 @@ static void peep_interact_with_path(Peep* peep, const CoordsXYE& coords)
                     guest->InteractionRideIndex = rideIndex;
 
                     // Add the peep to the ride queue.
-                    uint16_t old_last_peep = ride->stations[stationNum].LastPeepInQueue;
-                    ride->stations[stationNum].LastPeepInQueue = guest->sprite_index;
+                    auto& station = ride->GetStation(stationNum);
+                    auto old_last_peep = station.LastPeepInQueue;
+                    station.LastPeepInQueue = guest->sprite_index;
                     guest->GuestNextInQueue = old_last_peep;
-                    ride->stations[stationNum].QueueLength++;
+                    station.QueueLength++;
 
                     peep_decrement_num_riders(guest);
                     guest->CurrentRide = rideIndex;
@@ -2172,7 +2220,7 @@ static void peep_interact_with_path(Peep* peep, const CoordsXYE& coords)
     }
     else
     {
-        peep->InteractionRideIndex = RIDE_ID_NULL;
+        peep->InteractionRideIndex = RideId::GetNull();
         if (guest != nullptr && peep->State == PeepState::Queuing)
         {
             guest->RemoveFromQueue();
@@ -2188,9 +2236,9 @@ static void peep_interact_with_path(Peep* peep, const CoordsXYE& coords)
  */
 static bool peep_interact_with_shop(Peep* peep, const CoordsXYE& coords)
 {
-    ride_id_t rideIndex = coords.element->AsTrack()->GetRideIndex();
+    RideId rideIndex = coords.element->AsTrack()->GetRideIndex();
     auto ride = get_ride(rideIndex);
-    if (ride == nullptr || !ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IS_SHOP))
+    if (ride == nullptr || !ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IS_SHOP_OR_FACILITY))
         return false;
 
     auto* guest = peep->As<Guest>();
@@ -2230,7 +2278,7 @@ static bool peep_interact_with_shop(Peep* peep, const CoordsXYE& coords)
     if (ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_PEEP_SHOULD_GO_INSIDE_FACILITY))
     {
         guest->TimeLost = 0;
-        if (!guest->ShouldGoOnRide(ride, 0, false, false))
+        if (!guest->ShouldGoOnRide(ride, StationIndex::FromUnderlying(0), false, false))
         {
             peep_return_to_centre_of_tile(guest);
             return true;
@@ -2260,9 +2308,8 @@ static bool peep_interact_with_shop(Peep* peep, const CoordsXYE& coords)
             auto ft = Formatter();
             guest->FormatNameTo(ft);
             ride->FormatNameTo(ft);
-            rct_string_id string_id = ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IN_RIDE)
-                ? STR_PEEP_TRACKING_PEEP_IS_IN_X
-                : STR_PEEP_TRACKING_PEEP_IS_ON_X;
+            StringId string_id = ride->GetRideTypeDescriptor().HasFlag(RIDE_TYPE_FLAG_IN_RIDE) ? STR_PEEP_TRACKING_PEEP_IS_IN_X
+                                                                                               : STR_PEEP_TRACKING_PEEP_IS_ON_X;
             if (gConfigNotifications.guest_used_facility)
             {
                 News::AddItemToQueue(News::ItemType::PeepOnRide, string_id, guest->sprite_index, ft);
@@ -2272,7 +2319,7 @@ static bool peep_interact_with_shop(Peep* peep, const CoordsXYE& coords)
     else
     {
         if (guest->GuestHeadingToRideId == rideIndex)
-            guest->GuestHeadingToRideId = RIDE_ID_NULL;
+            guest->GuestHeadingToRideId = RideId::GetNull();
         guest->ActionSpriteImageOffset = _unk_F1AEF0;
         guest->SetState(PeepState::Buying);
         guest->CurrentRide = rideIndex;
@@ -2315,7 +2362,7 @@ void Peep::PerformNextAction(uint8_t& pathing_result, TileElement*& tile_result)
 
         if (guest != nullptr)
         {
-            result = guest_path_finding(guest);
+            result = gGuestPathfinder->CalculateNextDestination(*guest);
         }
         else
         {
@@ -2394,7 +2441,7 @@ void Peep::PerformNextAction(uint8_t& pathing_result, TileElement*& tile_result)
         int16_t height = abs(tile_element_height(newLoc) - z);
         if (height <= 3 || (Is<Staff>() && height <= 32))
         {
-            InteractionRideIndex = RIDE_ID_NULL;
+            InteractionRideIndex = RideId::GetNull();
             if (guest != nullptr && State == PeepState::Queuing)
             {
                 guest->RemoveFromQueue();
@@ -2464,7 +2511,7 @@ int32_t Peep::GetZOnSlope(int32_t tile_x, int32_t tile_y)
     return NextLoc.z + map_height_from_slope({ tile_x, tile_y }, slope, GetNextIsSloped());
 }
 
-rct_string_id get_real_name_string_id_from_id(uint32_t id)
+StringId get_real_name_string_id_from_id(uint32_t id)
 {
     // Generate a name_string_idx from the peep Id using bit twiddling
     uint16_t ax = static_cast<uint16_t>(id + 0xF0B);
@@ -2489,7 +2536,7 @@ rct_string_id get_real_name_string_id_from_id(uint32_t id)
     return dx;
 }
 
-int32_t peep_compare(const uint16_t sprite_index_a, const uint16_t sprite_index_b)
+int32_t peep_compare(const EntityId sprite_index_a, const EntityId sprite_index_b)
 {
     Peep const* peep_a = GetEntity<Peep>(sprite_index_a);
     Peep const* peep_b = GetEntity<Peep>(sprite_index_b);
@@ -2694,7 +2741,6 @@ void Peep::Paint(paint_session& session, int32_t imageDirection) const
 {
     PROFILED_FUNCTION();
 
-#ifdef __ENABLE_LIGHTFX__
     if (lightfx_is_available())
     {
         if (Is<Staff>())
@@ -2721,15 +2767,9 @@ void Peep::Paint(paint_session& session, int32_t imageDirection) const
             LightfxAdd3DLight(*this, 0, loc, LightType::Spot1);
         }
     }
-#endif
 
     rct_drawpixelinfo* dpi = &session.DPI;
     if (dpi->zoom_level > ZoomLevel{ 2 })
-    {
-        return;
-    }
-
-    if (session.ViewFlags & VIEWPORT_FLAG_INVISIBLE_PEEPS)
     {
         return;
     }

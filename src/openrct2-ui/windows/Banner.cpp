@@ -23,7 +23,7 @@
 
 static constexpr const int32_t WW = 113;
 static constexpr const int32_t WH = 96;
-static constexpr const rct_string_id WINDOW_TITLE = STR_BANNER_WINDOW_TITLE;
+static constexpr const StringId WINDOW_TITLE = STR_BANNER_WINDOW_TITLE;
 
 // clang-format off
 enum WindowBannerWidgetIdx {
@@ -39,7 +39,7 @@ enum WindowBannerWidgetIdx {
     WIDX_TEXT_COLOUR_DROPDOWN_BUTTON
 };
 
-static constexpr const rct_string_id BannerColouredTextFormats[] = {
+static constexpr const StringId BannerColouredTextFormats[] = {
     STR_TEXT_COLOR_BLACK,
     STR_TEXT_COLOR_GREY,
     STR_TEXT_COLOR_WHITE,
@@ -126,10 +126,7 @@ public:
     void OnOpen() override
     {
         widgets = window_banner_widgets;
-        enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_BANNER_TEXT) | (1ULL << WIDX_BANNER_NO_ENTRY)
-            | (1ULL << WIDX_BANNER_DEMOLISH) | (1ULL << WIDX_MAIN_COLOUR) | (1ULL << WIDX_TEXT_COLOUR_DROPDOWN)
-            | (1ULL << WIDX_TEXT_COLOUR_DROPDOWN_BUTTON);
-        WindowInitScrollWidgets(this);
+        WindowInitScrollWidgets(*this);
     }
 
     void Initialise(rct_windownumber _number)
@@ -145,7 +142,7 @@ public:
         CreateViewport();
     }
 
-    void OnMouseDown(rct_widgetindex widgetIndex) override
+    void OnMouseDown(WidgetIndex widgetIndex) override
     {
         rct_widget* widget = &widgets[widgetIndex];
         auto* banner = GetBanner(GetBannerIndex());
@@ -163,8 +160,8 @@ public:
 
                 for (int32_t i = 0; i < 13; ++i)
                 {
-                    gDropdownItemsFormat[i] = STR_DROPDOWN_MENU_LABEL;
-                    gDropdownItemsArgs[i] = BannerColouredTextFormats[i + 1];
+                    gDropdownItems[i].Format = STR_DROPDOWN_MENU_LABEL;
+                    gDropdownItems[i].Args = BannerColouredTextFormats[i + 1];
                 }
 
                 // Switch to the dropdown box widget.
@@ -179,7 +176,7 @@ public:
         }
     }
 
-    void OnMouseUp(rct_widgetindex widgetIndex) override
+    void OnMouseUp(WidgetIndex widgetIndex) override
     {
         auto* banner = GetBanner(GetBannerIndex());
         if (banner == nullptr)
@@ -218,7 +215,7 @@ public:
         }
     }
 
-    void OnDropdown(rct_widgetindex widgetIndex, int32_t dropdownIndex) override
+    void OnDropdown(WidgetIndex widgetIndex, int32_t dropdownIndex) override
     {
         switch (widgetIndex)
         {
@@ -242,7 +239,7 @@ public:
         }
     }
 
-    void OnTextInput(rct_widgetindex widgetIndex, std::string_view text) override
+    void OnTextInput(WidgetIndex widgetIndex, std::string_view text) override
     {
         if (widgetIndex == WIDX_BANNER_TEXT)
         {
@@ -263,7 +260,7 @@ public:
 
         if (viewport != nullptr)
         {
-            window_draw_viewport(&dpi, this);
+            window_draw_viewport(&dpi, *this);
         }
     }
 
@@ -303,12 +300,12 @@ public:
  */
 rct_window* WindowBannerOpen(rct_windownumber number)
 {
-    auto w = static_cast<BannerWindow*>(window_bring_to_front_by_number(WC_BANNER, number));
+    auto w = static_cast<BannerWindow*>(window_bring_to_front_by_number(WindowClass::Banner, number));
 
     if (w != nullptr)
         return w;
 
-    w = WindowCreate<BannerWindow>(WC_BANNER, WW, WH, 0);
+    w = WindowCreate<BannerWindow>(WindowClass::Banner, WW, WH, 0);
 
     if (w != nullptr)
         w->Initialise(number);

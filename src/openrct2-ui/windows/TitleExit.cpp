@@ -26,7 +26,7 @@ static rct_widget window_title_exit_widgets[] = {
 };
 
 static void WindowTitleExitPaint(rct_window *w, rct_drawpixelinfo *dpi);
-static void WindowTitleExitMouseup(rct_window *w, rct_widgetindex widgetIndex);
+static void WindowTitleExitMouseup(rct_window *w, WidgetIndex widgetIndex);
 
 static rct_window_event_list window_title_exit_events([](auto& events)
 {
@@ -44,11 +44,10 @@ rct_window* WindowTitleExitOpen()
     rct_window* window;
 
     window = WindowCreate(
-        ScreenCoordsXY(context_get_width() - 40, context_get_height() - 64), 40, 64, &window_title_exit_events, WC_TITLE_EXIT,
-        WF_STICK_TO_BACK | WF_TRANSPARENT);
+        ScreenCoordsXY(context_get_width() - 40, context_get_height() - 64), 40, 64, &window_title_exit_events,
+        WindowClass::TitleExit, WF_STICK_TO_BACK | WF_TRANSPARENT);
     window->widgets = window_title_exit_widgets;
-    window->enabled_widgets |= (1ULL << WIDX_EXIT);
-    WindowInitScrollWidgets(window);
+    WindowInitScrollWidgets(*window);
 
     return window;
 }
@@ -57,7 +56,7 @@ rct_window* WindowTitleExitOpen()
  *
  *  rct2: 0x0066B83C
  */
-static void WindowTitleExitMouseup(rct_window* w, rct_widgetindex widgetIndex)
+static void WindowTitleExitMouseup(rct_window* w, WidgetIndex widgetIndex)
 {
     if (gIntroState != IntroState::None)
         return;
@@ -77,5 +76,5 @@ static void WindowTitleExitMouseup(rct_window* w, rct_widgetindex widgetIndex)
  */
 static void WindowTitleExitPaint(rct_window* w, rct_drawpixelinfo* dpi)
 {
-    WindowDrawWidgets(w, dpi);
+    WindowDrawWidgets(*w, dpi);
 }

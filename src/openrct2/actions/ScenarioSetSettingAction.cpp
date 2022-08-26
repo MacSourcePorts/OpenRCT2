@@ -46,11 +46,11 @@ GameActions::Result ScenarioSetSettingAction::Execute() const
             {
                 if (_value != 0)
                 {
-                    gParkFlags |= PARK_FLAGS_NO_MONEY_SCENARIO;
+                    gParkFlags |= PARK_FLAGS_NO_MONEY;
                 }
                 else
                 {
-                    gParkFlags &= ~PARK_FLAGS_NO_MONEY_SCENARIO;
+                    gParkFlags &= ~PARK_FLAGS_NO_MONEY;
                 }
             }
             else
@@ -64,33 +64,33 @@ GameActions::Result ScenarioSetSettingAction::Execute() const
                     gParkFlags &= ~PARK_FLAGS_NO_MONEY;
                 }
                 // Invalidate all windows that have anything to do with finance
-                window_invalidate_by_class(WC_RIDE);
-                window_invalidate_by_class(WC_PEEP);
-                window_invalidate_by_class(WC_PARK_INFORMATION);
-                window_invalidate_by_class(WC_FINANCES);
-                window_invalidate_by_class(WC_BOTTOM_TOOLBAR);
-                window_invalidate_by_class(WC_TOP_TOOLBAR);
+                window_invalidate_by_class(WindowClass::Ride);
+                window_invalidate_by_class(WindowClass::Peep);
+                window_invalidate_by_class(WindowClass::ParkInformation);
+                window_invalidate_by_class(WindowClass::Finances);
+                window_invalidate_by_class(WindowClass::BottomToolbar);
+                window_invalidate_by_class(WindowClass::TopToolbar);
             }
             break;
         case ScenarioSetSetting::InitialCash:
-            gInitialCash = std::clamp<money64>(_value, MONEY(0, 00), MONEY(1000000, 00));
+            gInitialCash = std::clamp<money64>(_value, 0.00_GBP, 1000000.00_GBP);
             gCash = gInitialCash;
-            window_invalidate_by_class(WC_FINANCES);
-            window_invalidate_by_class(WC_BOTTOM_TOOLBAR);
+            window_invalidate_by_class(WindowClass::Finances);
+            window_invalidate_by_class(WindowClass::BottomToolbar);
             break;
         case ScenarioSetSetting::InitialLoan:
-            gBankLoan = std::clamp<money64>(_value, MONEY(0, 00), MONEY(5000000, 00));
+            gBankLoan = std::clamp<money64>(_value, 0.00_GBP, 5000000.00_GBP);
             gMaxBankLoan = std::max(gBankLoan, gMaxBankLoan);
-            window_invalidate_by_class(WC_FINANCES);
+            window_invalidate_by_class(WindowClass::Finances);
             break;
         case ScenarioSetSetting::MaximumLoanSize:
-            gMaxBankLoan = std::clamp<money64>(_value, MONEY(0, 00), MONEY(5000000, 00));
+            gMaxBankLoan = std::clamp<money64>(_value, 0.00_GBP, 5000000.00_GBP);
             gBankLoan = std::min(gBankLoan, gMaxBankLoan);
-            window_invalidate_by_class(WC_FINANCES);
+            window_invalidate_by_class(WindowClass::Finances);
             break;
         case ScenarioSetSetting::AnnualInterestRate:
             gBankLoanInterestRate = std::clamp<uint8_t>(_value, 0, 80);
-            window_invalidate_by_class(WC_FINANCES);
+            window_invalidate_by_class(WindowClass::Finances);
             break;
         case ScenarioSetSetting::ForbidMarketingCampaigns:
             if (_value != 0)
@@ -103,7 +103,7 @@ GameActions::Result ScenarioSetSettingAction::Execute() const
             }
             break;
         case ScenarioSetSetting::AverageCashPerGuest:
-            gGuestInitialCash = std::clamp<money64>(_value, MONEY(0, 00), MONEY(1000, 00));
+            gGuestInitialCash = std::clamp<money64>(_value, 0.00_GBP, 1000.00_GBP);
             break;
         case ScenarioSetSetting::GuestInitialHappiness:
             gGuestInitialHappiness = std::clamp<uint8_t>(_value, 40, 250);
@@ -135,10 +135,10 @@ GameActions::Result ScenarioSetSettingAction::Execute() const
             }
             break;
         case ScenarioSetSetting::CostToBuyLand:
-            gLandPrice = std::clamp<money32>(_value, MONEY(5, 00), MONEY(200, 00));
+            gLandPrice = std::clamp<money32>(_value, 5.00_GBP, 200.00_GBP);
             break;
         case ScenarioSetSetting::CostToBuyConstructionRights:
-            gConstructionRightsPrice = std::clamp<money32>(_value, MONEY(5, 00), MONEY(200, 00));
+            gConstructionRightsPrice = std::clamp<money32>(_value, 5.00_GBP, 200.00_GBP);
             break;
         case ScenarioSetSetting::ParkChargeMethod:
             if (gScreenFlags & SCREEN_FLAGS_SCENARIO_EDITOR)
@@ -147,19 +147,19 @@ GameActions::Result ScenarioSetSettingAction::Execute() const
                 {
                     gParkFlags |= PARK_FLAGS_PARK_FREE_ENTRY;
                     gParkFlags &= ~PARK_FLAGS_UNLOCK_ALL_PRICES;
-                    gParkEntranceFee = MONEY(0, 00);
+                    gParkEntranceFee = 0.00_GBP;
                 }
                 else if (_value == 1)
                 {
                     gParkFlags &= ~PARK_FLAGS_PARK_FREE_ENTRY;
                     gParkFlags &= ~PARK_FLAGS_UNLOCK_ALL_PRICES;
-                    gParkEntranceFee = MONEY(10, 00);
+                    gParkEntranceFee = 10.00_GBP;
                 }
                 else
                 {
                     gParkFlags |= PARK_FLAGS_PARK_FREE_ENTRY;
                     gParkFlags |= PARK_FLAGS_UNLOCK_ALL_PRICES;
-                    gParkEntranceFee = MONEY(10, 00);
+                    gParkEntranceFee = 10.00_GBP;
                 }
             }
             else
@@ -179,13 +179,13 @@ GameActions::Result ScenarioSetSettingAction::Execute() const
                     gParkFlags |= PARK_FLAGS_PARK_FREE_ENTRY;
                     gParkFlags |= PARK_FLAGS_UNLOCK_ALL_PRICES;
                 }
-                window_invalidate_by_class(WC_PARK_INFORMATION);
-                window_invalidate_by_class(WC_RIDE);
+                window_invalidate_by_class(WindowClass::ParkInformation);
+                window_invalidate_by_class(WindowClass::Ride);
             }
             break;
         case ScenarioSetSetting::ParkChargeEntryFee:
-            gParkEntranceFee = std::clamp<money32>(_value, MONEY(0, 00), MAX_ENTRANCE_FEE);
-            window_invalidate_by_class(WC_PARK_INFORMATION);
+            gParkEntranceFee = std::clamp<money32>(_value, 0.00_GBP, MAX_ENTRANCE_FEE);
+            window_invalidate_by_class(WindowClass::ParkInformation);
             break;
         case ScenarioSetSetting::ForbidTreeRemoval:
             if (_value != 0)
@@ -244,6 +244,6 @@ GameActions::Result ScenarioSetSettingAction::Execute() const
             log_error("Invalid setting: %u", _setting);
             return GameActions::Result(GameActions::Status::InvalidParameters, STR_NONE, STR_NONE);
     }
-    window_invalidate_by_class(WC_EDITOR_SCENARIO_OPTIONS);
+    window_invalidate_by_class(WindowClass::EditorScenarioOptions);
     return GameActions::Result();
 }

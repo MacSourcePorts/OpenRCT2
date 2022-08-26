@@ -28,11 +28,6 @@
 
 using namespace OpenRCT2;
 
-ObjectType& operator++(ObjectType& d, int)
-{
-    return d = (d == ObjectType::Count) ? ObjectType::Ride : static_cast<ObjectType>(static_cast<uint8_t>(d) + 1);
-}
-
 ObjectEntryDescriptor::ObjectEntryDescriptor(const rct_object_entry& newEntry)
 {
     if (!newEntry.IsEmpty())
@@ -117,15 +112,6 @@ void Object::PopulateTablesFromJson(IReadObjectContext* context, json_t& root)
 {
     _stringTable.ReadJson(root);
     _usesFallbackImages = _imageTable.ReadJson(context, root);
-}
-
-rct_object_entry Object::ParseObjectEntry(const std::string& s)
-{
-    rct_object_entry entry = {};
-    std::fill_n(entry.name, sizeof(entry.name), ' ');
-    auto copyLen = std::min<size_t>(8, s.size());
-    std::copy_n(s.c_str(), copyLen, entry.name);
-    return entry;
 }
 
 std::string Object::GetOverrideString(uint8_t index) const
@@ -303,21 +289,42 @@ uint64_t ObjectAsset::GetSize() const
     return 0;
 }
 
-std::unique_ptr<IStream> ObjectAsset::GetStream() const
+std::vector<uint8_t> ObjectAsset::GetData() const
 {
     if (_zipPath.empty())
     {
-        return std::make_unique<FileStream>(_path, FILE_MODE_OPEN);
+        return File::ReadAllBytes(_path);
     }
 
     auto zipArchive = Zip::TryOpen(_zipPath, ZIP_ACCESS::READ);
     if (zipArchive != nullptr)
     {
-        auto stream = zipArchive->GetFileStream(_path);
-        if (stream != nullptr)
+        return zipArchive->GetFileData(_path);
+    }
+    return {};
+}
+
+std::unique_ptr<IStream> ObjectAsset::GetStream() const
+{
+    try
+    {
+        if (_zipPath.empty())
         {
-            return std::make_unique<ZipStreamWrapper>(std::move(zipArchive), std::move(stream));
+            return std::make_unique<FileStream>(_path, FILE_MODE_OPEN);
         }
+
+        auto zipArchive = Zip::TryOpen(_zipPath, ZIP_ACCESS::READ);
+        if (zipArchive != nullptr)
+        {
+            auto stream = zipArchive->GetFileStream(_path);
+            if (stream != nullptr)
+            {
+                return std::make_unique<ZipStreamWrapper>(std::move(zipArchive), std::move(stream));
+            }
+        }
+    }
+    catch (...)
+    {
     }
     return {};
 }
